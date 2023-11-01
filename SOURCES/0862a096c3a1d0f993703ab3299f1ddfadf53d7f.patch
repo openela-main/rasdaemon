@@ -1,0 +1,85 @@
+commit 0862a096c3a1d0f993703ab3299f1ddfadf53d7f
+Author: Shiju Jose <shiju.jose@huawei.com>
+Date:   Tue Aug 11 13:31:46 2020 +0100
+
+    rasdaemon: ras-mc-ctl: Add ARM processor error information
+    
+    Add supporting ARM processor error in the ras-mc-ctl tool.
+    
+    Signed-off-by: Shiju Jose <shiju.jose@huawei.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+---
+ util/ras-mc-ctl.in |   40 ++++++++++++++++++++++++++++++++++++++++
+ 1 file changed, 40 insertions(+)
+
+--- rasdaemon-0.6.1.orig/util/ras-mc-ctl.in	2021-10-06 14:14:25.000440090 -0400
++++ rasdaemon-0.6.1/util/ras-mc-ctl.in	2021-10-06 14:15:59.995598590 -0400
+@@ -1124,6 +1124,7 @@ sub summary
+     my ($query, $query_handle, $out);
+     my ($err_type, $label, $mc, $top, $mid, $low, $count, $msg);
+     my ($etype, $severity, $etype_string, $severity_string);
++    my ($affinity, $mpidr);
+ 
+     my $dbh = DBI->connect("dbi:SQLite:dbname=$dbname", "", "", {});
+ 
+@@ -1159,6 +1160,22 @@ sub summary
+     }
+     $query_handle->finish;
+ 
++    # ARM processor arm_event errors
++    $query = "select affinity, mpidr, count(*) from arm_event group by affinity, mpidr";
++    $query_handle = $dbh->prepare($query);
++    $query_handle->execute();
++    $query_handle->bind_columns(\($affinity, $mpidr, $count));
++    $out = "";
++    while($query_handle->fetch()) {
++        $out .= "\t$count errors\n";
++    }
++    if ($out ne "") {
++        print "ARM processor events summary:\n$out\n";
++    } else {
++        print "No ARM processor errors.\n\n";
++    }
++    $query_handle->finish;
++
+     # extlog errors
+     $query = "select etype, severity, count(*) from extlog_event group by etype, severity";
+     $query_handle = $dbh->prepare($query);
+@@ -1202,6 +1219,7 @@ sub errors
+     my ($query, $query_handle, $id, $time, $count, $type, $msg, $label, $mc, $top, $mid, $low, $addr, $grain, $syndrome, $detail, $out);
+     my ($mcgcap,$mcgstatus, $status, $misc, $ip, $tsc, $walltime, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $bank_name, $mcgstatus_msg, $mcistatus_msg, $user_action, $mc_location);
+     my ($timestamp, $etype, $severity, $etype_string, $severity_string, $fru_id, $fru_text, $cper_data);
++    my ($error_count, $affinity, $mpidr, $r_state, $psci_state);
+ 
+     my $dbh = DBI->connect("dbi:SQLite:dbname=$dbname", "", "", {});
+ 
+@@ -1241,6 +1259,28 @@ sub errors
+     }
+     $query_handle->finish;
+ 
++    # ARM processor arm_event errors
++    $query = "select id, timestamp, error_count, affinity, mpidr, running_state, psci_state from arm_event order by id";
++    $query_handle = $dbh->prepare($query);
++    $query_handle->execute();
++    $query_handle->bind_columns(\($id, $timestamp, $error_count, $affinity, $mpidr, $r_state, $psci_state));
++    $out = "";
++    while($query_handle->fetch()) {
++        $out .= "$id $timestamp error: ";
++        $out .= "error_count=$error_count, " if ($error_count);
++        $out .= "affinity_level=$affinity, ";
++        $out .= sprintf "mpidr=0x%x, ", $mpidr;
++        $out .= sprintf "running_state=0x%x, ", $r_state;
++        $out .= sprintf "psci_state=0x%x", $psci_state;
++        $out .= "\n";
++    }
++    if ($out ne "") {
++        print "ARM processor events:\n$out\n";
++    } else {
++        print "No ARM processor errors.\n\n";
++    }
++    $query_handle->finish;
++
+     # Extlog errors
+     $query = "select id, timestamp, etype, severity, address, fru_id, fru_text, cper_data from extlog_event order by id";
+     $query_handle = $dbh->prepare($query);

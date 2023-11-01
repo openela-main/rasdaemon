@@ -1,0 +1,138 @@
+commit a8c776ed94f68ae31d7b5f74e19545698898c13c
+Author: Mauro Carvalho Chehab <mchehab+samsung@kernel.org>
+Date:   Tue Aug 14 13:06:27 2018 -0300
+
+    mce-intel-*: fix a warning when using FIELD(<num>, NULL)
+    
+    Internally, FIELD() macro checks the size of an array, by
+    using ARRAY_SIZE. Well, this macro causes a division by zero
+    if NULL is used, as its type is void, as warned:
+    
+            mce-intel-dunnington.c:30:2: note: in expansion of macro ‘FIELD’
+              FIELD(17, NULL),
+              ^~~~~
+            ras-mce-handler.h:28:33: warning: division ‘sizeof (void *) / sizeof (void)’ does not compute the number of array elements [-Wsizeof-pointer-div]
+             #define ARRAY_SIZE(x) (sizeof(x)/sizeof(*(x)))
+                                             ^
+            bitfield.h:37:51: note: in expansion of macro ‘ARRAY_SIZE’
+             #define FIELD(start_bit, name) { start_bit, name, ARRAY_SIZE(name) }
+                                                               ^~~~~~~~~~
+    
+    While this warning is harmless, it may prevent seeing more serios
+    warnings. So, add a FIELD_NULL(<num>) macro to avoid that.
+    
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+samsung@kernel.org>
+
+diff --git a/bitfield.h b/bitfield.h
+index c7dfeb1..fccbb36 100644
+--- a/bitfield.h
++++ b/bitfield.h
+@@ -35,6 +35,7 @@ struct numfield {
+ };
+ 
+ #define FIELD(start_bit, name) { start_bit, name, ARRAY_SIZE(name) }
++#define FIELD_NULL(start_bit) { start_bit, NULL, 0 }
+ #define SBITFIELD(start_bit, string) { start_bit, ((char * [2]) { NULL, string }), 2 }
+ 
+ #define NUMBER(start, end, name) { start, end, name, "%Lu", 0 }
+diff --git a/mce-intel-dunnington.c b/mce-intel-dunnington.c
+index 4b1c7e3..c695c62 100644
+--- a/mce-intel-dunnington.c
++++ b/mce-intel-dunnington.c
+@@ -27,14 +27,14 @@
+ 
+ static struct field dunnington_bus_status[] = {
+ 	SBITFIELD(16, "Parity error detected during FSB request phase"),
+-	FIELD(17, NULL),
++	FIELD_NULL(17),
+ 	SBITFIELD(20, "Hard Failure response received for a local transaction"),
+ 	SBITFIELD(21, "Parity error on FSB response field detected"),
+ 	SBITFIELD(22, "Parity data error on inbound data detected"),
+-	FIELD(23, NULL),
+-	FIELD(25, NULL),
+-	FIELD(28, NULL),
+-	FIELD(31, NULL),
++	FIELD_NULL(23),
++	FIELD_NULL(25),
++	FIELD_NULL(28),
++	FIELD_NULL(31),
+ 	{}
+ };
+ 
+diff --git a/mce-intel-p4-p6.c b/mce-intel-p4-p6.c
+index 4615e1a..5c6c3ff 100644
+--- a/mce-intel-p4-p6.c
++++ b/mce-intel-p4-p6.c
+@@ -60,7 +60,7 @@ static char *bus_queue_error_type[] = {
+ };
+ 
+ static struct field p6_shared_status[] = {
+-	FIELD(16, NULL),
++	FIELD_NULL(16),
+ 	FIELD(19, bus_queue_req_type),
+ 	FIELD(25, bus_queue_error_type),
+ 	FIELD(25, bus_queue_error_type),
+@@ -68,7 +68,7 @@ static struct field p6_shared_status[] = {
+ 	SBITFIELD(36, "received parity error on response transaction"),
+ 	SBITFIELD(38, "timeout BINIT (ROB timeout)."
+ 		  " No micro-instruction retired for some time"),
+-	FIELD(39, NULL),
++	FIELD_NULL(39),
+ 	SBITFIELD(42, "bus transaction received hard error response"),
+ 	SBITFIELD(43, "failure that caused IERR"),
+ 	/* The following are reserved for Core in the SDM. Let's keep them here anyways*/
+@@ -76,15 +76,15 @@ static struct field p6_shared_status[] = {
+ 	SBITFIELD(45, "uncorrectable ECC error"),
+ 	SBITFIELD(46, "correctable ECC error"),
+ 	/* [47..54]: ECC syndrome */
+-	FIELD(55, NULL),
++	FIELD_NULL(55),
+ 	{},
+ };
+ 
+ static struct field p6old_status[] = {
+ 	SBITFIELD(28, "FRC error"),
+ 	SBITFIELD(29, "BERR on this CPU"),
+-	FIELD(31, NULL),
+-	FIELD(32, NULL),
++	FIELD_NULL(31),
++	FIELD_NULL(32),
+ 	SBITFIELD(35, "BINIT received from external bus"),
+ 	SBITFIELD(37, "Received hard error reponse on split transaction (Bus BINIT)"),
+ 	{}
+@@ -94,9 +94,9 @@ static struct field core2_status[] = {
+ 	SBITFIELD(28, "MCE driven"),
+ 	SBITFIELD(29, "MCE is observed"),
+ 	SBITFIELD(31, "BINIT observed"),
+-	FIELD(32, NULL),
++	FIELD_NULL(32),
+ 	SBITFIELD(34, "PIC or FSB data parity error"),
+-	FIELD(35, NULL),
++	FIELD_NULL(35),
+ 	SBITFIELD(37, "FSB address parity error detected"),
+ 	{}
+ };
+diff --git a/mce-intel-tulsa.c b/mce-intel-tulsa.c
+index 6cea421..e59bf06 100644
+--- a/mce-intel-tulsa.c
++++ b/mce-intel-tulsa.c
+@@ -39,7 +39,7 @@ static struct field tls_bus_status[] = {
+ 	SBITFIELD(16, "Parity error detected during FSB request phase"),
+ 	SBITFIELD(17, "Partity error detected on Core 0 request's address field"),
+ 	SBITFIELD(18, "Partity error detected on Core 1 request's address field"),
+-	FIELD(19, NULL),
++	FIELD_NULL(19),
+ 	SBITFIELD(20, "Parity error on FSB response field detected"),
+ 	SBITFIELD(21, "FSB data parity error on inbound date detected"),
+ 	SBITFIELD(22, "Data parity error on data received from Core 0 detected"),
+@@ -48,8 +48,8 @@ static struct field tls_bus_status[] = {
+ 	SBITFIELD(25, "Data ECC event to error on inbound data correctable or uncorrectable"),
+ 	SBITFIELD(26, "Pad logic detected a data strobe glitch or sequencing error"),
+ 	SBITFIELD(27, "Pad logic detected a request strobe glitch or sequencing error"),
+-	FIELD(28, NULL),
+-	FIELD(31, NULL),
++	FIELD_NULL(28),
++	FIELD_NULL(31),
+ 	{}
+ };
+ 

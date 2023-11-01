@@ -1,0 +1,38 @@
+commit 854364ba44aee9bc5646f6537fc744b0b54aff37
+Author: Muralidhara M K <muralimk@amd.com>
+Date:   Thu Aug 20 21:00:57 2020 +0530
+
+    rasdaemon: Add 8 channel decoding for SMCA systems
+    
+    Current Scalable Machine Check Architecture (SMCA) systems support up
+    to 8 UMC channels.
+    
+    To find the UMC channel represented by a bank, look at the 6th nibble
+    in the MCA_IPID[InstanceId] field.
+    
+    Signed-off-by: Muralidhara M K <muralimk@amd.com>
+    [ Adjust commit message. ]
+    Signed-off-by: Yazen Ghannam <yazen.ghannam@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/mce-amd-smca.c b/mce-amd-smca.c
+index d0b6cb6..7c619fd 100644
+--- a/mce-amd-smca.c
++++ b/mce-amd-smca.c
+@@ -438,15 +438,7 @@ static void amd_decode_errcode(struct mce_event *e)
+  */
+ static int find_umc_channel(struct mce_event *e)
+ {
+-	uint32_t umc_instance_id[] = {0x50f00, 0x150f00};
+-	uint32_t instance_id = EXTRACT(e->ipid, 0, 31);
+-	int i, channel = -1;
+-
+-	for (i = 0; i < ARRAY_SIZE(umc_instance_id); i++)
+-		if (umc_instance_id[i] == instance_id)
+-			channel = i;
+-
+-	return channel;
++	return EXTRACT(e->ipid, 0, 31) >> 20;
+ }
+ /* Decode extended errors according to Scalable MCA specification */
+ static void decode_smca_error(struct mce_event *e)

@@ -1,0 +1,148 @@
+commit b497a3d6a39d402c41065e9284d49114b97e3bfe
+Author: Shiju Jose <shiju.jose@huawei.com>
+Date:   Mon Mar 8 16:57:28 2021 +0000
+
+    rasdaemon: ras-mc-ctl: Add memory failure events
+    
+    Add supporting memory failure errors (memory_failure_event)
+    to the ras-mc-ctl tool.
+    
+    Sample Log,
+    ras-mc-ctl --summary
+    ...
+    Memory failure events summary:
+            Delayed errors: 4
+            Failed errors: 1
+    ...
+    
+    ras-mc-ctl --errors
+    ...
+    Memory failure events:
+    1 2020-10-28 23:20:41 -0800 error: pfn=0x204000000, page_type=free buddy page, action_result=Delayed
+    2 2020-10-28 23:31:38 -0800 error: pfn=0x204000000, page_type=free buddy page, action_result=Delayed
+    3 2020-10-28 23:54:54 -0800 error: pfn=0x205000000, page_type=free buddy page, action_result=Delayed
+    4 2020-10-29 00:12:25 -0800 error: pfn=0x204000000, page_type=free buddy page, action_result=Delayed
+    5 2020-10-29 00:26:36 -0800 error: pfn=0x204000000, page_type=free buddy page, action_result=Failed
+    
+    Signed-off-by: Shiju Jose <shiju.jose@huawei.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+---
+ configure.ac       |   11 +++++++++++
+ util/ras-mc-ctl.in |   46 +++++++++++++++++++++++++++++++++++++++++++---
+ 2 files changed, 54 insertions(+), 3 deletions(-)
+
+--- a/util/ras-mc-ctl.in	2021-10-13 13:51:00.887292563 -0400
++++ b/util/ras-mc-ctl.in	2021-10-13 13:51:27.536061894 -0400
+@@ -44,11 +44,13 @@ my $modprobe    = find_prog ("modprobe")
+ my $has_aer = 0;
+ my $has_arm = 0;
+ my $has_extlog = 0;
++my $has_mem_failure = 0;
+ my $has_mce = 0;
+ 
+ @WITH_AER_TRUE@$has_aer = 1;
+ @WITH_ARM_TRUE@$has_arm = 1;
+ @WITH_EXTLOG_TRUE@$has_extlog = 1;
++@WITH_MEMORY_FAILURE_TRUE@$has_mem_failure = 1;
+ @WITH_MCE_TRUE@$has_mce = 1;
+ 
+ my %conf        = ();
+@@ -1132,7 +1134,7 @@ sub summary
+ {
+     require DBI;
+     my ($query, $query_handle, $out);
+-    my ($err_type, $label, $mc, $top, $mid, $low, $count, $msg);
++    my ($err_type, $label, $mc, $top, $mid, $low, $count, $msg, $action_result);
+     my ($etype, $severity, $etype_string, $severity_string);
+     my ($affinity, $mpidr);
+ 
+@@ -1203,9 +1205,27 @@ sub summary
+             $out .= "\t$count $etype_string $severity_string errors\n";
+         }
+         if ($out ne "") {
+-            print "Extlog records summary:\n$out";
++            print "Extlog records summary:\n$out\n";
+         } else {
+-            print "No Extlog errors.\n";
++            print "No Extlog errors.\n\n";
++        }
++        $query_handle->finish;
++    }
++
++    # Memory failure errors
++    if ($has_mem_failure == 1) {
++        $query = "select action_result, count(*) from memory_failure_event group by action_result";
++        $query_handle = $dbh->prepare($query);
++        $query_handle->execute();
++        $query_handle->bind_columns(\($action_result, $count));
++        $out = "";
++        while($query_handle->fetch()) {
++            $out .= "\t$action_result errors: $count\n";
++        }
++        if ($out ne "") {
++            print "Memory failure events summary:\n$out\n";
++        } else {
++            print "No Memory failure errors.\n\n";
+         }
+         $query_handle->finish;
+     }
+@@ -1238,6 +1258,7 @@ sub errors
+     my ($mcgcap,$mcgstatus, $status, $misc, $ip, $tsc, $walltime, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $bank_name, $mcgstatus_msg, $mcistatus_msg, $user_action, $mc_location);
+     my ($timestamp, $etype, $severity, $etype_string, $severity_string, $fru_id, $fru_text, $cper_data);
+     my ($error_count, $affinity, $mpidr, $r_state, $psci_state);
++    my ($pfn, $page_type, $action_result);
+ 
+     my $dbh = DBI->connect("dbi:SQLite:dbname=$dbname", "", "", {});
+ 
+@@ -1329,6 +1350,25 @@ $out .= sprintf "address=0x%08x, ", $add
+         }
+         $query_handle->finish;
+     }
++
++    # Memory failure errors
++    if ($has_mem_failure == 1) {
++        $query = "select id, timestamp, pfn, page_type, action_result from memory_failure_event order by id";
++        $query_handle = $dbh->prepare($query);
++        $query_handle->execute();
++        $query_handle->bind_columns(\($id, $timestamp, $pfn, $page_type, $action_result));
++        $out = "";
++        while($query_handle->fetch()) {
++            $out .= "$id $timestamp error: ";
++            $out .= "pfn=$pfn, page_type=$page_type, action_result=$action_result\n";
++        }
++        if ($out ne "") {
++            print "Memory failure events:\n$out\n";
++        } else {
++            print "No Memory failure errors.\n\n";
++        }
++        $query_handle->finish;
++    }
+ 
+     # MCE mce_record errors
+     if ($has_mce == 1) {
+--- a/configure.ac	2018-04-25 06:28:51.000000000 -0400
++++ b/configure.ac	2021-10-13 13:51:00.916292312 -0400
+@@ -80,6 +80,16 @@ AS_IF([test "x$enable_extlog" = "xyes"],
+ ])
+ AM_CONDITIONAL([WITH_EXTLOG], [test x$enable_extlog = xyes])
+ 
++AC_ARG_ENABLE([memory_failure],
++    AS_HELP_STRING([--enable-memory-failure], [enable memory failure events (currently experimental)]))
++
++AS_IF([test "x$enable_memory_failure" = "xyes" || test "x$enable_all" == "xyes"], [
++  AC_DEFINE(HAVE_MEMORY_FAILURE,1,"have memory failure events collect")
++  AC_SUBST([WITH_MEMORY_FAILURE])
++])
++AM_CONDITIONAL([WITH_MEMORY_FAILURE], [test x$enable_memory_failure = xyes || test x$enable_all == xyes])
++AM_COND_IF([WITH_MEMORY_FAILURE], [USE_MEMORY_FAILURE="yes"], [USE_MEMORY_FAILURE="no"])
++
+ AC_ARG_ENABLE([abrt_report],
+     AS_HELP_STRING([--enable-abrt-report], [enable report event to ABRT (currently experimental)]))
+ 
+@@ -127,4 +137,5 @@ compile time options summary
+     ABRT report         : $enable_abrt_report
+     HIP07 SAS HW errors : $enable_hisi_ns_decode
+     ARM events          : $enable_arm
++    Memory Failure      : $USE_MEMORY_FAILURE
+ EOF

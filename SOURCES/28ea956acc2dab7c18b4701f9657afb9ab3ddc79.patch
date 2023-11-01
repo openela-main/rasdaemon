@@ -1,0 +1,28 @@
+commit 28ea956acc2dab7c18b4701f9657afb9ab3ddc79
+Author: Muralidhara M K <muralimk@amd.com>
+Date:   Mon Jul 12 05:18:43 2021 -0500
+
+    rasdaemon: set SMCA maximum number of banks to 64
+    
+    Newer AMD systems with SMCA banks support up to 64 MCA banks per CPU.
+    
+    This patch is based on the commit below upstremed into the kernel:
+    a0bc32b3cacf ("x86/mce: Increase maximum number of banks to 64")
+    
+    Signed-off-by: Muralidhara M K <muralimk@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/mce-amd-smca.c b/mce-amd-smca.c
+index e0cf512..3c346f4 100644
+--- a/mce-amd-smca.c
++++ b/mce-amd-smca.c
+@@ -75,6 +75,9 @@ enum smca_bank_types {
+ 	N_SMCA_BANK_TYPES
+ };
+ 
++/* Maximum number of MCA banks per CPU. */
++#define MAX_NR_BANKS	64
++
+ /* SMCA Extended error strings */
+ /* Load Store */
+ static const char * const smca_ls_mce_desc[] = {

@@ -1,0 +1,71 @@
+commit 899fcc2cf21c86b5462c8f4441cd9c92b3d75f7d
+Author: Aristeu Rozanski <arozansk@redhat.com>
+Date:   Thu Jan 19 08:45:57 2023 -0500
+
+    rasdaemon: ras-report: fix possible but unlikely file descriptor leak
+    
+    Found with covscan.
+    
+    Signed-off-by: Aristeu Rozanski <arozansk@redhat.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+---
+ ras-report.c |   12 ++++++------
+ 1 file changed, 6 insertions(+), 6 deletions(-)
+
+--- rasdaemon-0.6.1.orig/ras-report.c	2023-01-23 11:36:20.972368760 -0500
++++ rasdaemon-0.6.1/ras-report.c	2023-01-23 11:36:23.236343267 -0500
+@@ -374,7 +374,7 @@ if(rc < 0){
+ 
+ mc_fail:
+ 
+-	if(sockfd > 0){
++	if(sockfd >= 0){
+ 		close(sockfd);
+ 	}
+ 
+@@ -424,7 +424,7 @@ if(rc < 0){
+ 
+ aer_fail:
+ 
+-	if(sockfd > 0){
++	if(sockfd >= 0){
+ 		close(sockfd);
+ 	}
+ 
+@@ -473,7 +473,7 @@ rc = 0;
+ 
+ non_standard_fail:
+ 
+-	if(sockfd > 0){
++	if(sockfd >= 0){
+ 		close(sockfd);
+ 	}
+ 
+@@ -518,7 +518,7 @@ rc = 0;
+ 
+ arm_fail:
+ 
+-	if(sockfd > 0){
++	if(sockfd >= 0){
+ 		close(sockfd);
+ 	}
+ 
+@@ -564,7 +564,7 @@ if(rc < 0){
+ 
+ mce_fail:
+ 
+-	if(sockfd > 0){
++	if(sockfd >= 0){
+ 		close(sockfd);
+ 	}
+ 
+@@ -609,7 +609,7 @@ if (rc < 0)
+ 	done = 1;
+ 
+ mf_fail:
+-	if (sockfd > 0)
++	if (sockfd >= 0)
+ 		close(sockfd);
+ 
+ 	if (done)
