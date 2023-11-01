@@ -1,0 +1,40 @@
+commit 9a5baed97b21af31064d9995ffcfaac0e9d7983e
+Author: DmNosachev <quartz64@gmail.com>
+Date:   Tue Jun 29 13:37:48 2021 +0300
+
+    labels/supermicro: supermicro db syntax
+    
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/labels/supermicro b/labels/supermicro
+index bfaed93..47ea05f 100644
+--- a/labels/supermicro
++++ b/labels/supermicro
+@@ -18,17 +18,17 @@ Vendor: Supermicro
+     DIMMA1: 0.0.0;    DIMMA2: 0.0.1;
+     DIMMB1: 0.1.0;    DIMMB2: 0.1.1;
+ 
+-	Product: X10SRA-F
+-		DIMMA1: 0.0.0
+-		DIMMA2: 0.0.1
+-		DIMMB1: 0.1.0
+-		DIMMB2: 0.1.1
+-		DIMMC1: 1.0.0
+-		DIMMC2: 1.0.1
+-		DIMMD1: 1.1.0
+-		DIMMD2: 1.1.1
++	Model: X10SRA-F
++		DIMMA1: 0.0.0;
++		DIMMA2: 0.0.1;
++		DIMMB1: 0.1.0;
++		DIMMB2: 0.1.1;
++		DIMMC1: 1.0.0;
++		DIMMC2: 1.0.1;
++		DIMMD1: 1.1.0;
++		DIMMD2: 1.1.1;
+ 
+-	Product: H8DGU
++	Model: H8DGU
+ 		P1_DIMM1A: 0.2.0;
+ 		P1_DIMM1A: 0.3.0;
+ 		P2_DIMM1A: 3.2.0;

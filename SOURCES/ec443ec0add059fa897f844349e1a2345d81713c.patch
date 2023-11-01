@@ -1,0 +1,31 @@
+commit ec443ec0add059fa897f844349e1a2345d81713c
+Author: DmNosachev <quartz64@gmail.com>
+Date:   Tue Jun 29 11:33:10 2021 +0300
+
+    labels/supermicro: added x11dph-i labels
+    
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/labels/supermicro b/labels/supermicro
+index 3fd6fee..bfaed93 100644
+--- a/labels/supermicro
++++ b/labels/supermicro
+@@ -68,3 +68,17 @@ Vendor: Supermicro
+ 		P1_DIMM4B: 1.1.1;
+ 		P2_DIMM4B: 2.0.1;
+ 		P2_DIMM4B: 2.1.1;
++  
++  Model: X11DPH-i
++    P1-DIMMA1: 0.0.0;    P1-DIMMA2: 0.0.1;
++    P1-DIMMB1: 0.1.0;
++    P1-DIMMC1: 0.2.0;
++    P1-DIMMD1: 1.0.0;    P1-DIMMD2: 1.0.1;
++    P1-DIMME1: 1.1.0;
++    P1-DIMMF1: 1.2.0;
++    P2-DIMMA1: 2.0.0;    P2-DIMMA2: 2.0.1;
++    P2-DIMMB1: 2.1.0;
++    P2-DIMMC1: 2.2.0;
++    P2-DIMMD1: 3.0.0;    P2-DIMMD2: 3.0.1;
++    P2-DIMME1: 3.1.0;
++    P2-DIMMF1: 3.2.0;
+\ No newline at end of file
