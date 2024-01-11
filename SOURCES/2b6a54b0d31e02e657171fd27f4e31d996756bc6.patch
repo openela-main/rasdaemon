@@ -1,0 +1,44 @@
+commit 2b6a54b0d31e02e657171fd27f4e31d996756bc6
+Author: DmNosachev <quartz64@gmail.com>
+Date:   Thu Jul 22 10:25:38 2021 +0300
+
+    labels/supermicro: added Supermicro X10DRL, X11SPM
+    
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/labels/supermicro b/labels/supermicro
+index 1e7761f..990fc9e 100644
+--- a/labels/supermicro
++++ b/labels/supermicro
+@@ -88,6 +88,16 @@ Vendor: Supermicro
+     P2-DIMMF1: 1.1.0;    P2-DIMMF2: 1.1.1;
+     P2-DIMMG1: 1.2.0;    P2-DIMMG2: 1.2.1;
+     P2-DIMMH1: 1.3.0;    P2-DIMMH2: 1.3.1;
++
++  Model: X10DRL-i
++    P1-DIMMA1: 0.0.0;
++    P1-DIMMB1: 0.1.0;
++    P1-DIMMC1: 0.2.0;
++    P1-DIMMD1: 0.3.0;
++    P2-DIMME1: 1.0.0;
++    P2-DIMMF1: 1.1.0;
++    P2-DIMMG1: 1.2.0;
++    P2-DIMMH1: 1.3.0;
+   
+   Model: X11DDW-NT, X11DDW-L
+     P1-DIMMA1: 0.0.0;
+@@ -102,6 +112,14 @@ Vendor: Supermicro
+     P2-DIMMD1: 3.0.0;
+     P2-DIMME1: 3.1.0;
+     P2-DIMMF1: 3.2.0;
++  
++  Model: X11SPM-F, X11SPM-TF, X11SPM-TPF
++    DIMMA1: 0.0.0;
++    DIMMB1: 0.1.0;
++    DIMMC1: 0.2.0;
++    DIMMD1: 1.0.0;
++    DIMME1: 1.1.0;
++    DIMMF1: 1.2.0;
+     
+   Model: B1DRi
+     P1_DIMMA1: 0.0.0;

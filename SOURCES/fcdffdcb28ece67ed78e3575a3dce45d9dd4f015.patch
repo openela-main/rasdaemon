@@ -1,0 +1,28 @@
+commit fcdffdcb28ece67ed78e3575a3dce45d9dd4f015
+Author: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+Date:   Wed May 26 10:37:52 2021 +0200
+
+    rasdaemon.spec.in: Fix the description on this example file
+    
+    While this is used just to test if building it is OK, better
+    to keep the logs nice ;-)
+    
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/misc/rasdaemon.spec.in b/misc/rasdaemon.spec.in
+index 6ef223f..afa4359 100644
+--- a/misc/rasdaemon.spec.in
++++ b/misc/rasdaemon.spec.in
+@@ -61,10 +61,10 @@ rm INSTALL %{buildroot}/usr/include/*.h
+ %changelog
+ 
+ * Wed May 26 2021 Mauro Carvalho Chehab <mchehab+huawei@kernel.org>  0.6.7-1
+-- Bump to version 0.6.5 with several fixes and additions
++- Bump to version 0.6.7 with several fixes and additions
+ 
+ * Tue Jul 21 2020 Mauro Carvalho Chehab <mchehab+huawei@kernel.org>  0.6.6-1
+-- Bump to version 0.6.5 with several fixes, new hip08 events and memory prediction analysis
++- Bump to version 0.6.6 with several fixes, new hip08 events and memory prediction analysis
+ 
+ * Wed Nov 20 2019 Mauro Carvalho Chehab <mchehab+huawei@kernel.org>  0.6.5-1
+ - Bump to version 0.6.5 with several fixes and improves PCIe events record

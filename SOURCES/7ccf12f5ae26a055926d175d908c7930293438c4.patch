@@ -1,0 +1,26 @@
+commit 7ccf12f5ae26a055926d175d908c7930293438c4
+Author: DmNosachev <quartz64@gmail.com>
+Date:   Fri Jul 23 17:28:33 2021 +0300
+
+    labels/supermicro: added Supermicro X11SCW
+    
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/labels/supermicro b/labels/supermicro
+index 990fc9e..aea7c3c 100644
+--- a/labels/supermicro
++++ b/labels/supermicro
+@@ -133,4 +133,10 @@ Vendor: Supermicro
+   
+   Model: X11SCA, X11SCA-F
+     DIMMA1:  0.0.0, 0.1.0;    DIMMA2:   0.2.0, 0.3.0;
+-    DIMMB1:  0.0.1, 0.1.1;    DIMMB2:   0.2.1, 0.3.1;
+\ No newline at end of file
++    DIMMB1:  0.0.1, 0.1.1;    DIMMB2:   0.2.1, 0.3.1;
++    
++  Model: X11SCW-F
++    DIMMA1: 0.1.0;
++    DIMMA2: 0.0.0;
++    DIMMB1: 0.1.1;
++    DIMMB2: 0.0.1;
+\ No newline at end of file

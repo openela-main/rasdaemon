@@ -1,0 +1,27 @@
+commit dda7d95bcbbb95e0db557a7a9325ee9815ab4e9b
+Author: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+Date:   Wed May 26 12:55:54 2021 +0200
+
+    Add support for multi-arch builds
+    
+    Allow building rasdaemon on several architectures:
+            - x86_64
+            - arm 64
+            - ppc 64 LE
+    
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index 747a844..898687c 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -9,6 +9,9 @@ jobs:
+   Ubuntu:
+     name: Ubuntu
+     runs-on: ubuntu-latest
++    strategy:
++      matrix:
++        arch: [x64_64, aarch64, ppc64le]
+     steps:
+       - uses: actions/checkout@v2
+       - name: prepare

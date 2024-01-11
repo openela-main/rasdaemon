@@ -1,0 +1,24 @@
+commit 7937f0d6c2aaaed096f3a3d306416743c0dcb7a4
+Author: Muralidhara M K <muralimk@amd.com>
+Date:   Wed Jul 28 01:52:12 2021 -0500
+
+    rasdaemon: Support MCE for AMD CPU family 19h
+    
+    Add support for family 19h x86 CPUs from AMD.
+    
+    Signed-off-by: Muralidhara M K <muralimk@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/ras-mce-handler.c b/ras-mce-handler.c
+index 805004a..f2b53d4 100644
+--- a/ras-mce-handler.c
++++ b/ras-mce-handler.c
+@@ -208,7 +208,7 @@ static int detect_cpu(struct ras_events *ras)
+ 			mce->cputype = CPU_AMD_SMCA;
+ 			goto ret;
+ 		}
+-		if (mce->family > 23) {
++		if (mce->family > 25) {
+ 			log(ALL, LOG_INFO,
+ 			    "Can't parse MCE for this AMD CPU yet %d\n",
+ 			    mce->family);
