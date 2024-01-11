@@ -1,0 +1,66 @@
+commit 2a1d217660351c08eb2f8bccebf939abba2f7e69
+Author: Brian WoodsGhannam, Yazen <brian.woods@amd.comYazen.Ghannam@amd.com>
+Date:   Fri Nov 1 15:48:13 2019 +0100
+
+    rasdaemon: rename CPU_NAPLES cputype
+    
+    Change CPU_NAPLES to CPU_AMD_SMCA to reflect that it isn't just NAPLES
+    that is supported, but AMD's Scalable Machine Check Architecture (SMCA).
+    
+      [ Yazen: change family check to feature check, and change CPU name. ]
+    
+    CC: "mchehab+samsung@kernel.org" <mchehab+samsung@kernel.org>, "Namburu, Chandu-babu" <chandu@amd.com> # Thread-Topic: [PATCH 1/2] rasdaemon: rename CPU_NAPLES cputype
+    Signed-off-by: Brian Woods <brian.woods@amd.com>
+    Signed-off-by: Yazen Ghannam <yazen.ghannam@amd.com>
+    Cc: Chandu-babu Namburu <chandu@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+---
+ ras-mce-handler.c |   10 ++++++----
+ ras-mce-handler.h |    2 +-
+ 2 files changed, 7 insertions(+), 5 deletions(-)
+
+--- rasdaemon-0.6.1.orig/ras-mce-handler.c	2021-05-26 15:16:24.699096556 -0400
++++ rasdaemon-0.6.1/ras-mce-handler.c	2021-05-26 15:18:06.543162745 -0400
+@@ -55,7 +55,7 @@ [CPU_XEON75XX] = "Intel Xeon 7500 series
+ 	[CPU_KNIGHTS_LANDING] = "Knights Landing",
+ 	[CPU_KNIGHTS_MILL] = "Knights Mill",
+ 	[CPU_SKYLAKE_XEON] = "Skylake server",
+-	[CPU_NAPLES] = "AMD Family 17h Zen1"
++	[CPU_AMD_SMCA] = "AMD Scalable MCA",
+ };
+ 
+ static enum cputype select_intel_cputype(struct ras_events *ras)
+@@ -191,8 +191,10 @@ ret = 0;
+ 	if (!strcmp(mce->vendor, "AuthenticAMD")) {
+ 		if (mce->family == 15)
+ 			mce->cputype = CPU_K8;
+-		if (mce->family == 23)
+-			mce->cputype = CPU_NAPLES;
++		if (strstr(mce->processor_flags, "smca")) {
++			mce->cputype = CPU_AMD_SMCA;
++			goto ret;
++		}
+ 		if (mce->family > 23) {
+ 			log(ALL, LOG_INFO,
+ 			    "Can't parse MCE for this AMD CPU yet %d\n",
+@@ -435,7 +437,7 @@ if (pevent_get_field_val(s, event, "ipid
+ 	case CPU_K8:
+ 		rc = parse_amd_k8_event(ras, &e);
+ 		break;
+-	case CPU_NAPLES:
++	case CPU_AMD_SMCA:
+ 		rc = parse_amd_smca_event(ras, &e);
+ 		break;
+ 	default:			/* All other CPU types are Intel */
+--- rasdaemon-0.6.1.orig/ras-mce-handler.h	2021-05-26 15:17:15.409631590 -0400
++++ rasdaemon-0.6.1/ras-mce-handler.h	2021-05-26 15:18:20.102038424 -0400
+@@ -50,7 +50,7 @@ enum cputype {
+ 	CPU_KNIGHTS_LANDING,
+ 	CPU_KNIGHTS_MILL,
+ 	CPU_SKYLAKE_XEON,
+-	CPU_NAPLES,
++	CPU_AMD_SMCA,
+ };
+ 
+ struct mce_event {

@@ -1,0 +1,37 @@
+commit b22be68453b2497e86cbd273b9cd56fadc5859e3
+Author: Ying Lv <lvying6@huawei.com>
+Date:   Wed May 15 11:15:42 2019 +0800
+
+    fix rasdaemon high CPU usage when part of CPUs offline
+    
+    When we set part of CPU core offline, such as by setting the kernel cmdline
+    maxcpus = N(N is less than the total number of system CPU cores).
+    And then, we will observe that the CPU usage of some rasdaemon threads
+    is very close to 100.
+    
+    This is because when part of CPU offline, poll in read_ras_event_all_cpus func
+    will fallback to pthread way.
+    Offlined CPU thread will return negative value when read trace_pipe_raw,
+    negative return value will covert to positive value because of 'unsigned size'.
+    So code will always go into 'size > 0' branch, and the CPU usage is too high.
+    
+    Here, variable size uses int type will go to the right branch.
+    
+    Fiexs: eff7c9e0("ras-events: Only use pthreads for collect if poll() not available")
+    Reported-by: Zhipeng Xie <xiezhipeng1@huawei.com>
+    Signed-off-by: Ying Lv <lvying6@huawei.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+samsung@kernel.org>
+
+diff --git a/ras-events.c b/ras-events.c
+index 4e7b815..38ebe1e 100644
+--- a/ras-events.c
++++ b/ras-events.c
+@@ -426,7 +426,7 @@ static int read_ras_event(int fd,
+ 			  struct kbuffer *kbuf,
+ 			  void *page)
+ {
+-	unsigned size;
++	int size;
+ 	unsigned long long time_stamp;
+ 	void *data;
+ 

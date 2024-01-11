@@ -1,0 +1,32 @@
+commit 16d929b024c31d54a7f8a72eab094376c7be27f5
+Author: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+Date:   Wed May 26 10:20:39 2021 +0200
+
+    Makefile.am: fix build header rules
+    
+    non-standard-hisilicon.h was added twice;
+    ras-memory-failure-handler.h is missing.
+    
+    Due to that, the tarball becomes incomplete, causing build
+    errors.
+    
+    While here, also adjust .travis.yml to use --enable-all.
+    
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+---
+ Makefile.am |    3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+--- a/Makefile.am	2021-10-13 13:27:53.402685179 -0400
++++ b/Makefile.am	2021-10-13 13:28:11.664525173 -0400
+@@ -54,7 +54,8 @@ rasdaemon_LDADD = -lpthread $(SQLITE3_LI
+ 
+ include_HEADERS = config.h  ras-events.h  ras-logger.h  ras-mc-handler.h \
+ 		  ras-aer-handler.h ras-mce-handler.h ras-record.h bitfield.h ras-report.h \
+-		  ras-extlog-handler.h ras-arm-handler.h ras-non-standard-handler.h
++		  ras-extlog-handler.h ras-arm-handler.h ras-non-standard-handler.h \
++		  ras-memory-failure-handler.h
+ 
+ # This rule can't be called with more than one Makefile job (like make -j8)
+ # I can't figure out a way to fix that

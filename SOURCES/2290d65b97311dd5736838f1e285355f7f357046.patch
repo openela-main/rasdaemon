@@ -1,0 +1,538 @@
+commit 2290d65b97311dd5736838f1e285355f7f357046
+Author: Shiju Jose <shiju.jose@huawei.com>
+Date:   Mon Mar 8 16:57:26 2021 +0000
+
+    rasdaemon: add support for memory_failure events
+    
+    Add support to log the memory_failure kernel trace
+    events.
+    
+    Example rasdaemon log and SQLite DB output for the
+    memory_failure event,
+    =================================================
+    rasdaemon: memory_failure_event store: 0x126ce8f8
+    rasdaemon: register inserted at db
+    <...>-785   [000]     0.000024: memory_failure_event: 2020-10-02 13:27:13 -0400 pfn=0x204000000 page_type=free buddy page action_result=Delayed
+    
+    CREATE TABLE memory_failure_event (id INTEGER PRIMARY KEY, timestamp TEXT, pfn TEXT, page_type TEXT, action_result TEXT);
+    INSERT INTO memory_failure_event VALUES(1,'2020-10-02 13:27:13 -0400','0x204000000','free buddy page','Delayed');
+    ==================================================
+    
+    Signed-off-by: Shiju Jose <shiju.jose@huawei.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+---
+ Makefile.am                  |    4 
+ ras-events.c                 |   15 +++
+ ras-memory-failure-handler.c |  179 +++++++++++++++++++++++++++++++++++++++++++
+ ras-memory-failure-handler.h |   25 ++++++
+ ras-record.c                 |   56 +++++++++++++
+ ras-record.h                 |   13 +++
+ ras-report.c                 |   68 ++++++++++++++++
+ ras-report.h                 |    5 -
+ 8 files changed, 364 insertions(+), 1 deletion(-)
+
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ b/ras-memory-failure-handler.c	2021-10-14 16:31:36.840657728 -0400
+@@ -0,0 +1,179 @@
++/*
++ * Copyright (c) Huawei Technologies Co., Ltd. 2020. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ */
++
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include "libtrace/kbuffer.h"
++#include "ras-memory-failure-handler.h"
++#include "ras-record.h"
++#include "ras-logger.h"
++#include "ras-report.h"
++
++/* Memory failure - various types of pages */
++enum mf_action_page_type {
++	MF_MSG_KERNEL,
++	MF_MSG_KERNEL_HIGH_ORDER,
++	MF_MSG_SLAB,
++	MF_MSG_DIFFERENT_COMPOUND,
++	MF_MSG_POISONED_HUGE,
++	MF_MSG_HUGE,
++	MF_MSG_FREE_HUGE,
++	MF_MSG_NON_PMD_HUGE,
++	MF_MSG_UNMAP_FAILED,
++	MF_MSG_DIRTY_SWAPCACHE,
++	MF_MSG_CLEAN_SWAPCACHE,
++	MF_MSG_DIRTY_MLOCKED_LRU,
++	MF_MSG_CLEAN_MLOCKED_LRU,
++	MF_MSG_DIRTY_UNEVICTABLE_LRU,
++	MF_MSG_CLEAN_UNEVICTABLE_LRU,
++	MF_MSG_DIRTY_LRU,
++	MF_MSG_CLEAN_LRU,
++	MF_MSG_TRUNCATED_LRU,
++	MF_MSG_BUDDY,
++	MF_MSG_BUDDY_2ND,
++	MF_MSG_DAX,
++	MF_MSG_UNSPLIT_THP,
++	MF_MSG_UNKNOWN,
++};
++
++/* Action results for various types of pages */
++enum mf_action_result {
++	MF_IGNORED,     /* Error: cannot be handled */
++	MF_FAILED,      /* Error: handling failed */
++	MF_DELAYED,     /* Will be handled later */
++	MF_RECOVERED,   /* Successfully recovered */
++};
++
++/* memory failure page types */
++static const struct {
++	int	type;
++	const char	*page_type;
++} mf_page_type[] = {
++	{ MF_MSG_KERNEL, "reserved kernel page" },
++	{ MF_MSG_KERNEL_HIGH_ORDER, "high-order kernel page"},
++	{ MF_MSG_SLAB, "kernel slab page"},
++	{ MF_MSG_DIFFERENT_COMPOUND, "different compound page after locking"},
++	{ MF_MSG_POISONED_HUGE, "huge page already hardware poisoned"},
++	{ MF_MSG_HUGE, "huge page"},
++	{ MF_MSG_FREE_HUGE, "free huge page"},
++	{ MF_MSG_NON_PMD_HUGE, "non-pmd-sized huge page"},
++	{ MF_MSG_UNMAP_FAILED, "unmapping failed page"},
++	{ MF_MSG_DIRTY_SWAPCACHE, "dirty swapcache page"},
++	{ MF_MSG_CLEAN_SWAPCACHE, "clean swapcache page"},
++	{ MF_MSG_DIRTY_MLOCKED_LRU, "dirty mlocked LRU page"},
++	{ MF_MSG_CLEAN_MLOCKED_LRU, "clean mlocked LRU page"},
++	{ MF_MSG_DIRTY_UNEVICTABLE_LRU, "dirty unevictable LRU page"},
++	{ MF_MSG_CLEAN_UNEVICTABLE_LRU, "clean unevictable LRU page"},
++	{ MF_MSG_DIRTY_LRU, "dirty LRU page"},
++	{ MF_MSG_CLEAN_LRU, "clean LRU page"},
++	{ MF_MSG_TRUNCATED_LRU, "already truncated LRU page"},
++	{ MF_MSG_BUDDY, "free buddy page"},
++	{ MF_MSG_BUDDY_2ND, "free buddy page (2nd try)"},
++	{ MF_MSG_DAX, "dax page"},
++	{ MF_MSG_UNSPLIT_THP, "unsplit thp"},
++	{ MF_MSG_UNKNOWN, "unknown page"},
++};
++
++/* memory failure action results */
++static const struct {
++	int result;
++	const char *action_result;
++} mf_action_result[] = {
++	{ MF_IGNORED, "Ignored" },
++	{ MF_FAILED, "Failed" },
++	{ MF_DELAYED, "Delayed" },
++	{ MF_RECOVERED, "Recovered" },
++};
++
++static const char *get_page_type(int page_type)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(mf_page_type); i++)
++		if (mf_page_type[i].type == page_type)
++			return mf_page_type[i].page_type;
++
++	return "unknown page";
++}
++
++static const char *get_action_result(int result)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(mf_action_result); i++)
++		if (mf_action_result[i].result == result)
++			return mf_action_result[i].action_result;
++
++	return "unknown";
++}
++
++
++int ras_memory_failure_event_handler(struct trace_seq *s,
++				     struct pevent_record *record,
++				     struct event_format *event, void *context)
++{
++	unsigned long long val;
++	struct ras_events *ras = context;
++	time_t now;
++	struct tm *tm;
++	struct ras_mf_event ev;
++
++	/*
++	 * Newer kernels (3.10-rc1 or upper) provide an uptime clock.
++	 * On previous kernels, the way to properly generate an event would
++	 * be to inject a fake one, measure its timestamp and diff it against
++	 * gettimeofday. We won't do it here. Instead, let's use uptime,
++	 * falling-back to the event report's time, if "uptime" clock is
++	 * not available (legacy kernels).
++	 */
++
++	if (ras->use_uptime)
++		now = record->ts/user_hz + ras->uptime_diff;
++	else
++		now = time(NULL);
++
++	tm = localtime(&now);
++	if (tm)
++		strftime(ev.timestamp, sizeof(ev.timestamp),
++			 "%Y-%m-%d %H:%M:%S %z", tm);
++	trace_seq_printf(s, "%s ", ev.timestamp);
++
++	if (pevent_get_field_val(s,  event, "pfn", record, &val, 1) < 0)
++		return -1;
++	sprintf(ev.pfn, "0x%llx", val);
++	trace_seq_printf(s, "pfn=0x%llx ", val);
++
++	if (pevent_get_field_val(s, event, "type", record, &val, 1) < 0)
++		return -1;
++	ev.page_type = get_page_type(val);
++	trace_seq_printf(s, "page_type=%s ", ev.page_type);
++
++	if (pevent_get_field_val(s, event, "result", record, &val, 1) < 0)
++		return -1;
++	ev.action_result = get_action_result(val);
++	trace_seq_printf(s, "action_result=%s ", ev.action_result);
++
++	/* Store data into the SQLite DB */
++#ifdef HAVE_SQLITE3
++	ras_store_mf_event(ras, &ev);
++#endif
++
++#ifdef HAVE_ABRT_REPORT
++	/* Report event to ABRT */
++	ras_report_mf_event(ras, &ev);
++#endif
++
++	return 0;
++}
+--- /dev/null	1970-01-01 00:00:00.000000000 +0000
++++ b/ras-memory-failure-handler.h	2021-10-14 16:31:36.840657728 -0400
+@@ -0,0 +1,25 @@
++/*
++ * Copyright (c) Huawei Technologies Co., Ltd. 2020. All rights reserved.
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++*/
++
++#ifndef __RAS_MEMORY_FAILURE_HANDLER_H
++#define __RAS_MEMORY_FAILURE_HANDLER_H
++
++#include "ras-events.h"
++#include "libtrace/event-parse.h"
++
++int ras_memory_failure_event_handler(struct trace_seq *s,
++				     struct pevent_record *record,
++				     struct event_format *event, void *context);
++
++#endif
+--- a/ras-record.c	2018-04-25 06:19:03.000000000 -0400
++++ b/ras-record.c	2021-10-14 16:31:36.840657728 -0400
+@@ -404,6 +404,55 @@ sqlite3_bind_text(priv->stmt_mce_record,
+ }
+ #endif
+ 
++/*
++ * Table and functions to handle ras:memory_failure
++ */
++
++#ifdef HAVE_MEMORY_FAILURE
++static const struct db_fields mf_event_fields[] = {
++	{ .name="id",			.type="INTEGER PRIMARY KEY" },
++	{ .name="timestamp",		.type="TEXT" },
++	{ .name="pfn",			.type="TEXT" },
++	{ .name="page_type",		.type="TEXT" },
++	{ .name="action_result",	.type="TEXT" },
++};
++
++static const struct db_table_descriptor mf_event_tab = {
++	.name = "memory_failure_event",
++	.fields = mf_event_fields,
++	.num_fields = ARRAY_SIZE(mf_event_fields),
++};
++
++int ras_store_mf_event(struct ras_events *ras, struct ras_mf_event *ev)
++{
++	int rc;
++	struct sqlite3_priv *priv = ras->db_priv;
++
++	if (!priv || !priv->stmt_mf_event)
++		return 0;
++	log(TERM, LOG_INFO, "memory_failure_event store: %p\n", priv->stmt_mf_event);
++
++	sqlite3_bind_text(priv->stmt_mf_event,  1, ev->timestamp, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mf_event,  2, ev->pfn, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mf_event,  3, ev->page_type, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mf_event,  4, ev->action_result, -1, NULL);
++
++	rc = sqlite3_step(priv->stmt_mf_event);
++	if (rc != SQLITE_OK && rc != SQLITE_DONE)
++		log(TERM, LOG_ERR,
++		    "Failed to do memory_failure_event step on sqlite: error = %d\n", rc);
++
++	rc = sqlite3_reset(priv->stmt_mf_event);
++	if (rc != SQLITE_OK && rc != SQLITE_DONE)
++		log(TERM, LOG_ERR,
++		    "Failed reset memory_failure_event on sqlite: error = %d\n",
++		    rc);
++
++	log(TERM, LOG_INFO, "register inserted at db\n");
++
++	return rc;
++}
++#endif
+ 
+ /*
+  * Generic code
+@@ -567,6 +616,13 @@ usleep(10000);
+ 		rc = ras_mc_prepare_stmt(priv, &priv->stmt_arm_record,
+ 					&arm_event_tab);
+ #endif
++#ifdef HAVE_MEMORY_FAILURE
++	rc = ras_mc_create_table(priv, &mf_event_tab);
++	if (rc == SQLITE_OK) {
++		rc = ras_mc_prepare_stmt(priv, &priv->stmt_mf_event,
++					 &mf_event_tab);
++	}
++#endif
+ 
+ 		ras->db_priv = priv;
+ 	return 0;
+--- a/ras-record.h	2018-04-25 06:19:03.000000000 -0400
++++ b/ras-record.h	2021-10-14 16:31:36.840657728 -0400
+@@ -75,12 +75,20 @@ struct ras_arm_event {
+ 	int32_t psci_state;
+ };
+ 
++struct ras_mf_event {
++	char timestamp[64];
++	char pfn[30];
++	const char *page_type;
++	const char *action_result;
++};
++
+ struct ras_mc_event;
+ struct ras_aer_event;
+ struct ras_extlog_event;
+ struct ras_non_standard_event;
+ struct ras_arm_event;
+ struct mce_event;
++struct ras_mf_event;
+ 
+ #ifdef HAVE_SQLITE3
+ 
+@@ -104,6 +112,9 @@ struct sqlite3_priv {
+ #ifdef HAVE_ARM
+ 	sqlite3_stmt	*stmt_arm_record;
+ #endif
++#ifdef HAVE_MEMORY_FAILURE
++	sqlite3_stmt	*stmt_mf_event;
++#endif
+ };
+ 
+ int ras_mc_event_opendb(unsigned cpu, struct ras_events *ras);
+@@ -113,6 +124,7 @@ int ras_store_mce_record(struct ras_even
+ int ras_store_extlog_mem_record(struct ras_events *ras, struct ras_extlog_event *ev);
+ int ras_store_non_standard_record(struct ras_events *ras, struct ras_non_standard_event *ev);
+ int ras_store_arm_record(struct ras_events *ras, struct ras_arm_event *ev);
++int ras_store_mf_event(struct ras_events *ras, struct ras_mf_event *ev);
+ 
+ #else
+ static inline int ras_mc_event_opendb(unsigned cpu, struct ras_events *ras) { return 0; };
+@@ -122,6 +134,7 @@ static inline int ras_store_mce_record(s
+ static inline int ras_store_extlog_mem_record(struct ras_events *ras, struct ras_extlog_event *ev) { return 0; };
+ static inline int ras_store_non_standard_record(struct ras_events *ras, struct ras_non_standard_event *ev) { return 0; };
+ static inline int ras_store_arm_record(struct ras_events *ras, struct ras_arm_event *ev) { return 0; };
++static inline int ras_store_mf_event(struct ras_events *ras, struct ras_mf_event *ev) { return 0; };
+ 
+ #endif
+ 
+--- a/ras-report.c	2017-10-14 05:11:34.000000000 -0400
++++ b/ras-report.c	2021-10-14 16:31:36.840657728 -0400
+@@ -255,6 +255,28 @@ "midr=0x%lx\n"	\
+ 	return 0;
+ }
+ 
++static int set_mf_event_backtrace(char *buf, struct ras_mf_event *ev)
++{
++	char bt_buf[MAX_BACKTRACE_SIZE];
++
++	if (!buf || !ev)
++		return -1;
++
++	sprintf(bt_buf, "BACKTRACE="    \
++                                                "timestamp=%s\n"	\
++                                                "pfn=%s\n"		\
++                                                "page_type=%s\n"	\
++                                                "action_result=%s\n",	\
++                                                ev->timestamp,		\
++                                                ev->pfn,		\
++                                                ev->page_type,		\
++                                                ev->action_result);
++
++	strcat(buf, bt_buf);
++
++	return 0;
++}
++
+ static int commit_report_backtrace(int sockfd, int type, void *ev){
+ 	char buf[MAX_BACKTRACE_SIZE];
+ 	char *pbuf = buf;
+@@ -283,6 +305,9 @@ memset(buf, 0, MAX_BACKTRACE_SIZE);
+ 	case ARM_EVENT:
+ 		rc = set_arm_event_backtrace(buf, (struct ras_arm_event *)ev);
+ 		break;
++	case MF_EVENT:
++		rc = set_mf_event_backtrace(buf, (struct ras_mf_event *)ev);
++		break;
+ 	default:
+ 		return -1;
+ 	}
+@@ -549,3 +574,46 @@ return 0;
+ 		return -1;
+ 	}
+ }
++
++int ras_report_mf_event(struct ras_events *ras, struct ras_mf_event *ev)
++{
++	char buf[MAX_MESSAGE_SIZE];
++	int sockfd = 0;
++	int done = 0;
++	int rc = -1;
++
++	memset(buf, 0, sizeof(buf));
++
++	sockfd = setup_report_socket();
++	if (sockfd < 0)
++		return -1;
++
++	rc = commit_report_basic(sockfd);
++	if (rc < 0)
++		goto mf_fail;
++
++	rc = commit_report_backtrace(sockfd, MF_EVENT, ev);
++	if (rc < 0)
++		goto mf_fail;
++
++	sprintf(buf, "ANALYZER=%s", "rasdaemon-memory_failure");
++	rc = write(sockfd, buf, strlen(buf) + 1);
++	if (rc < strlen(buf) + 1)
++		goto mf_fail;
++
++	sprintf(buf, "REASON=%s", "memory failure problem");
++	rc = write(sockfd, buf, strlen(buf) + 1);
++	if (rc < strlen(buf) + 1)
++		goto mf_fail;
++
++	done = 1;
++
++mf_fail:
++	if (sockfd > 0)
++		close(sockfd);
++
++	if (done)
++		return 0;
++	else
++		return -1;
++}
+--- a/ras-report.h	2017-10-14 05:11:34.000000000 -0400
++++ b/ras-report.h	2021-10-14 16:31:36.840657728 -0400
+@@ -34,7 +34,8 @@ enum {
+ 	MCE_EVENT,
+ 	AER_EVENT,
+ 	NON_STANDARD_EVENT,
+-	ARM_EVENT
++	ARM_EVENT,
++	MF_EVENT,
+ };
+ 
+ #ifdef HAVE_ABRT_REPORT
+@@ -44,6 +45,7 @@ int ras_report_aer_event(struct ras_even
+ int ras_report_mce_event(struct ras_events *ras, struct mce_event *ev);
+ int ras_report_non_standard_event(struct ras_events *ras, struct ras_non_standard_event *ev);
+ int ras_report_arm_event(struct ras_events *ras, struct ras_arm_event *ev);
++int ras_report_mf_event(struct ras_events *ras, struct ras_mf_event *ev);
+ 
+ #else
+ 
+@@ -52,6 +54,7 @@ static inline int ras_report_aer_event(s
+ static inline int ras_report_mce_event(struct ras_events *ras, struct mce_event *ev) { return 0; };
+ static inline int ras_report_non_standard_event(struct ras_events *ras, struct ras_non_standard_event *ev) { return 0; };
+ static inline int ras_report_arm_event(struct ras_events *ras, struct ras_arm_event *ev) { return 0; };
++static inline int ras_report_mf_event(struct ras_events *ras, struct ras_mf_event *ev) { return 0; };
+ 
+ #endif
+ 
+--- a/Makefile.am	2018-04-25 06:21:56.000000000 -0400
++++ b/Makefile.am	2021-10-14 16:37:42.423639762 -0400
+@@ -41,12 +41,16 @@ endif
+ if WITH_EXTLOG
+    rasdaemon_SOURCES += ras-extlog-handler.c
+ endif
++if WITH_MEMORY_FAILURE
++   rasdaemon_SOURCES += ras-memory-failure-handler.c
++endif
+ if WITH_ABRT_REPORT
+    rasdaemon_SOURCES += ras-report.c
+ endif
+ if WITH_HISI_NS_DECODE
+    rasdaemon_SOURCES += non-standard-hisi_hip07.c
+ endif
++
+ rasdaemon_LDADD = -lpthread $(SQLITE3_LIBS) libtrace/libtrace.a
+ 
+ include_HEADERS = config.h  ras-events.h  ras-logger.h  ras-mc-handler.h \
+--- a/ras-events.c	2021-10-14 16:31:36.730658636 -0400
++++ b/ras-events.c	2021-10-14 16:37:11.043898809 -0400
+@@ -33,6 +33,7 @@ * Foundation, Inc., 51 Franklin Street,
+ #include "ras-arm-handler.h"
+ #include "ras-mce-handler.h"
+ #include "ras-extlog-handler.h"
++#include "ras-memory-failure-handler.h"
+ #include "ras-record.h"
+ #include "ras-logger.h"
+ 
+@@ -218,6 +219,10 @@ if (rc < 0) {
+ 	rc |= __toggle_ras_mc_event(ras, "ras", "arm_event", enable);
+ #endif
+ 
++#ifdef HAVE_MEMORY_FAILURE
++	rc |= __toggle_ras_mc_event(ras, "ras", "memory_failure_event", enable);
++#endif
++
+ free_ras:
+ 	free(ras);
+ 	return rc;
+@@ -736,6 +741,16 @@ (void)open("/sys/kernel/debug/ras/daemon
+ 		    "ras", "aer_event");
+ #endif
+ 
++#ifdef HAVE_MEMORY_FAILURE
++       rc = add_event_handler(ras, pevent, page_size, "ras", "memory_failure_event",
++                              ras_memory_failure_event_handler);
++       if (!rc)
++               num_events++;
++       else
++               log(ALL, LOG_ERR, "Can't get traces from %s:%s\n",
++                   "ras", "memory_failure_event");
++#endif
++
+ 	if (!num_events) {
+ 		log(ALL, LOG_INFO,
+ 		    "Failed to trace all supported RAS events. Aborting.\n");
