@@ -1,0 +1,411 @@
+commit 932118b04a04104dfac6b8536419803f236e6118
+Author: Avadhut Naik <avadhut.naik@amd.com>
+Date:   Mon May 22 22:13:17 2023 +0000
+
+    rasdaemon: Add support for post-processing MCA errors
+    
+    Currently, the rasdaemon performs detailed error decoding of received
+    MCA errors on the system only whence it is running, either as a daemon
+    or in the foreground.
+    
+    As such, error decoding cannot be undertaken for any MCA errors received
+    whence the rasdaemon wasn't running. Additionally, if the error decoding
+    modules like edac_mce_amd too have not been loaded, error records in the
+    demsg buffer might correspond to raw values in associated MSRs, compelling
+    users to undertake decoding manually. The scenario seems more plausible on
+    AMD systems with Scalabale MCA (SMCA) with plans in place to remove SMCA
+    Extended Error Descriptions from the edac_mce_amd module in an effort to
+    offload SMCA Error Decoding to the rasdaemon.
+    
+    As such, add support to post-process and decode MCA Errors received on AMD
+    SMCA systems from raw MSR values. Support for post-processing and decoding
+    of MCA Errors received on CPUs of other vendors can be added in the future,
+    as needed.
+    
+    Suggested-by: Yazen Ghannam <yazen.ghannam@amd.com>
+    Signed-off-by: Avadhut Naik <avadhut.naik@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+---
+ mce-amd-smca.c    |    8 ++-
+ ras-events.h      |    1 
+ ras-mce-handler.c |  110 ++++++++++++++++++++++++++++++++++++++++++++++++++----
+ ras-mce-handler.h |    4 +
+ ras-record.h      |   10 ++++
+ rasdaemon.c       |   94 +++++++++++++++++++++++++++++++++++++++++++++-
+ 6 files changed, 216 insertions(+), 11 deletions(-)
+
+--- rasdaemon-0.6.7.orig/mce-amd-smca.c	2023-10-27 12:44:55.541077722 -0400
++++ rasdaemon-0.6.7/mce-amd-smca.c	2023-10-27 12:44:58.549049019 -0400
+@@ -710,7 +710,7 @@ static struct smca_bank_name smca_names[
+ 	[SMCA_GMI_PHY]			= { "Global Memory Interconnect PHY Unit" },
+ };
+ 
+-static void amd_decode_errcode(struct mce_event *e)
++void amd_decode_errcode(struct mce_event *e)
+ {
+ 
+ 	decode_amd_errcode(e);
+@@ -782,7 +782,7 @@ *hwid_mcatype = 0x00010000;
+ }
+ 
+ /* Decode extended errors according to Scalable MCA specification */
+-static void decode_smca_error(struct mce_event *e, struct mce_priv* m)
++void decode_smca_error(struct mce_event *e, struct mce_priv *m)
+ {
+ 	enum smca_bank_types bank_type;
+ 	const char *ip_name;
+@@ -827,7 +827,9 @@ for (i = 0; i < ARRAY_SIZE(smca_hwid_mca
+ 	/* Only print the descriptor of valid extended error code */
+ 	if (xec < smca_mce_descs[bank_type].num_descs)
+ 		mce_snprintf(e->mcastatus_msg,
+-			     " %s.\n", smca_mce_descs[bank_type].descs[xec]);
++			     "%s. Ext Err Code: %d",
++			     smca_mce_descs[bank_type].descs[xec],
++			     xec);
+ 
+ 	if (bank_type == SMCA_UMC && xec == 0) {
+ 		channel = find_umc_channel(e);
+--- rasdaemon-0.6.7.orig/ras-events.h	2023-10-27 12:44:55.541077722 -0400
++++ rasdaemon-0.6.7/ras-events.h	2023-10-27 12:44:58.549049019 -0400
+@@ -100,6 +100,7 @@ enum ghes_severity {
+ 
+ /* Function prototypes */
+ int toggle_ras_mc_event(int enable);
++int ras_offline_mce_event(struct ras_mc_offline_event *event);
+ int handle_ras_events(int record_events);
+ 
+ #endif
+--- rasdaemon-0.6.7.orig/ras-mce-handler.c	2023-10-27 12:44:55.541077722 -0400
++++ rasdaemon-0.6.7/ras-mce-handler.c	2023-10-27 12:45:27.159776011 -0400
+@@ -63,10 +63,8 @@ [CPU_XEON75XX] = "Intel Xeon 7500 series
+ 	[CPU_SAPPHIRERAPIDS] = "Sapphirerapids server",
+ };
+ 
+-static enum cputype select_intel_cputype(struct ras_events *ras)
++static enum cputype select_intel_cputype(struct mce_priv *mce)
+ {
+-	struct mce_priv *mce = ras->mce_priv;
+-
+ 	if (mce->family == 15) {
+ 		if (mce->model == 6)
+ 			return CPU_TULSA;
+@@ -140,9 +138,8 @@ if (mce->model > 0x1a) {
+ 	return mce->family == 6 ? CPU_P6OLD : CPU_GENERIC;
+ }
+ 
+-static int detect_cpu(struct ras_events *ras)
++static int detect_cpu(struct mce_priv *mce)
+ {
+-	struct mce_priv *mce = ras->mce_priv;
+ 	FILE *f;
+ 	int ret = 0;
+ 	char *line = NULL;
+@@ -221,7 +218,7 @@ ret = 0;
+ 		}
+ 		goto ret;
+ 	} else if (!strcmp(mce->vendor,"GenuineIntel")) {
+-		mce->cputype = select_intel_cputype(ras);
++		mce->cputype = select_intel_cputype(mce);
+ 	} else {
+ 		ret = EINVAL;
+ 	}
+@@ -246,7 +243,7 @@ int register_mce_handler(struct ras_even
+ 
+ 	mce = ras->mce_priv;
+ 
+-	rc = detect_cpu(ras);
++	rc = detect_cpu(mce);
+ 	if (rc) {
+ 		if (mce->processor_flags)
+ 			free (mce->processor_flags);
+@@ -383,6 +380,105 @@ #if 0
+ 	 */
+ }
+ 
++static int report_mce_offline(struct trace_seq *s,
++			      struct mce_event *mce,
++			      struct mce_priv *priv)
++{
++	time_t now;
++	struct tm *tm;
++
++	time(&now);
++	tm = localtime(&now);
++
++	if (tm)
++		strftime(mce->timestamp, sizeof(mce->timestamp),
++			 "%Y-%m-%d %H:%M:%S %z", tm);
++	trace_seq_printf(s, "%s,", mce->timestamp);
++
++	if (*mce->bank_name)
++		trace_seq_printf(s, " %s,", mce->bank_name);
++	else
++		trace_seq_printf(s, " bank=%x,", mce->bank);
++
++	if (*mce->mcastatus_msg)
++		trace_seq_printf(s, " mca: %s,", mce->mcastatus_msg);
++
++	if (*mce->mcistatus_msg)
++		trace_seq_printf(s, " mci: %s,", mce->mcistatus_msg);
++
++	if (*mce->mc_location)
++		trace_seq_printf(s, " Locn: %s,", mce->mc_location);
++
++	if (*mce->error_msg)
++		trace_seq_printf(s, " Error Msg: %s\n", mce->error_msg);
++
++	return 0;
++}
++
++int ras_offline_mce_event(struct ras_mc_offline_event *event)
++{
++	int rc = 0;
++	struct trace_seq s;
++	struct mce_event *mce = NULL;
++	struct mce_priv *priv = NULL;
++
++	mce = (struct mce_event *)calloc(1, sizeof(struct mce_event));
++	if (!mce) {
++		log(TERM, LOG_ERR, "Can't allocate memory for mce struct\n");
++		return errno;
++	}
++
++	priv = (struct mce_priv *)calloc(1, sizeof(struct mce_priv));
++	if (!priv) {
++		log(TERM, LOG_ERR, "Can't allocate memory for mce_priv struct\n");
++		free(mce);
++		return errno;
++	}
++
++	if (event->smca) {
++		priv->cputype = CPU_AMD_SMCA;
++		priv->family = event->family;
++		priv->model = event->model;
++	} else {
++		rc = detect_cpu(priv);
++		if (rc) {
++			log(TERM, LOG_ERR, "Failed to detect CPU\n");
++			goto free_mce;
++		}
++	}
++
++	mce->status = event->status;
++	mce->bank = event->bank;
++
++	switch (priv->cputype) {
++	case CPU_AMD_SMCA:
++		mce->synd = event->synd;
++		mce->ipid = event->ipid;
++		if (!mce->ipid || !mce->status) {
++			log(TERM, LOG_ERR, "%s MSR required.\n",
++				    mce->ipid ? "Status" : "Ipid");
++			rc = -EINVAL;
++			goto free_mce;
++		}
++		decode_smca_error(mce, priv);
++		amd_decode_errcode(mce);
++	break;
++	default:
++		break;
++	}
++
++	trace_seq_init(&s);
++	report_mce_offline(&s, mce, priv);
++	trace_seq_do_printf(&s);
++	fflush(stdout);
++	trace_seq_destroy(&s);
++
++free_mce:
++	free(priv);
++	free(mce);
++	return rc;
++}
++
+ int ras_mce_event_handler(struct trace_seq *s,
+ 			  struct pevent_record *record,
+ 			  struct event_format *event, void *context)
+--- rasdaemon-0.6.7.orig/ras-mce-handler.h	2023-10-27 12:44:55.541077722 -0400
++++ rasdaemon-0.6.7/ras-mce-handler.h	2023-10-27 12:44:58.550049010 -0400
+@@ -118,6 +118,10 @@ int ras_mce_event_handler(struct trace_s
+ /* enables intel iMC logs */
+ int set_intel_imc_log(enum cputype cputype, unsigned ncpus);
+ 
++/* Undertake AMD SMCA Error Decoding */
++void decode_smca_error(struct mce_event *e, struct mce_priv *m);
++void amd_decode_errcode(struct mce_event *e);
++
+ /* Per-CPU-type decoders for Intel CPUs */
+ void p4_decode_model(struct mce_event *e);
+ void core2_decode_model(struct mce_event *e);
+--- rasdaemon-0.6.7.orig/ras-record.h	2023-10-27 12:44:55.541077722 -0400
++++ rasdaemon-0.6.7/ras-record.h	2023-10-27 12:44:58.550049010 -0400
+@@ -21,6 +21,7 @@ * Foundation, Inc., 51 Franklin Street,
+ #define __RAS_RECORD_H
+ 
+ #include <stdint.h>
++#include <stdbool.h>
+ #include "config.h"
+ 
+ #define ARRAY_SIZE(x) (sizeof(x)/sizeof(*(x)))
+@@ -39,6 +40,15 @@ struct ras_mc_event {
+ 	const char *driver_detail;
+ };
+ 
++struct ras_mc_offline_event {
++	unsigned int family, model;
++	bool smca;
++	uint8_t bank;
++	uint64_t ipid;
++	uint64_t synd;
++	uint64_t status;
++};
++
+ struct ras_aer_event {
+ 	char timestamp[64];
+ 	const char *error_type;
+--- rasdaemon-0.6.7.orig/rasdaemon.c	2023-10-27 12:44:55.541077722 -0400
++++ rasdaemon-0.6.7/rasdaemon.c	2023-10-27 12:44:58.550049010 -0400
+@@ -41,8 +41,21 @@ struct arguments {
+ 	int record_events;
+ 	int enable_ras;
+ 	int foreground;
++	int offline;
+ };
+ 
++enum OFFLINE_ARG_KEYS {
++	SMCA = 0x100,
++	MODEL,
++	FAMILY,
++	BANK_NUM,
++	IPID_REG,
++	STATUS_REG,
++	SYNDROME_REG
++};
++
++struct ras_mc_offline_event event;
++
+ static error_t parse_opt(int k, char *arg, struct argp_state *state)
+ {
+ 	struct arguments *args = state->input;
+@@ -62,18 +75,84 @@ static error_t parse_opt(int k, char *ar
+ 	case 'f':
+ 		args->foreground++;
+ 		break;
++#ifdef HAVE_MCE
++	case 'p':
++		if (state->argc < 4)
++			argp_state_help(state, stdout, ARGP_HELP_LONG | ARGP_HELP_EXIT_ERR);
++		args->offline++;
++		break;
++#endif
+ 	default:
+ 		return ARGP_ERR_UNKNOWN;
+ 	}
+ 	return 0;
+ }
+ 
++#ifdef HAVE_MCE
++static error_t parse_opt_offline(int key, char *arg,
++				 struct argp_state *state)
++{
++	switch (key) {
++	case SMCA:
++		event.smca = true;
++		break;
++	case MODEL:
++		event.model = strtoul(state->argv[state->next], NULL, 0);
++		break;
++	case FAMILY:
++		event.family = strtoul(state->argv[state->next], NULL, 0);
++		break;
++	case BANK_NUM:
++		event.bank = atoi(state->argv[state->next]);
++		break;
++	case IPID_REG:
++		event.ipid = strtoull(state->argv[state->next], NULL, 0);
++		break;
++	case STATUS_REG:
++		event.status = strtoull(state->argv[state->next], NULL, 0);
++		break;
++	case SYNDROME_REG:
++		event.synd = strtoull(state->argv[state->next], NULL, 0);
++		break;
++	default:
++		return ARGP_ERR_UNKNOWN;
++	}
++	return 0;
++}
++#endif
++
+ long user_hz;
+ 
+ int main(int argc, char *argv[])
+ {
+ 	struct arguments args;
+ 	int idx = -1;
++
++#ifdef HAVE_MCE
++	const struct argp_option offline_options[] = {
++		{"smca", SMCA, 0, 0, "AMD SMCA Error Decoding"},
++		{"model", MODEL, 0, 0, "CPU Model"},
++		{"family", FAMILY, 0, 0, "CPU Family"},
++		{"bank", BANK_NUM, 0, 0, "Bank Number"},
++		{"ipid", IPID_REG, 0, 0, "IPID Register (for SMCA systems only)"},
++		{"status", STATUS_REG, 0, 0, "Status Register"},
++		{"synd", SYNDROME_REG, 0, 0, "Syndrome Register"},
++		{0, 0, 0, 0, 0, 0},
++	};
++
++	struct argp offline_argp = {
++		.options = offline_options,
++		.parser = parse_opt_offline,
++		.doc = TOOL_DESCRIPTION,
++		.args_doc = ARGS_DOC,
++	};
++
++	struct argp_child offline_parser[] = {
++		{&offline_argp, 0, "Post-Processing Options:", 0},
++		{0, 0, 0, 0},
++	};
++#endif
++
+ 	const struct argp_option options[] = {
+ 		{"enable",  'e', 0, 0, "enable RAS events and exit", 0},
+ 		{"disable", 'd', 0, 0, "disable RAS events and exit", 0},
+@@ -81,6 +160,10 @@ {"disable", 'd', 0, 0, "disable RAS even
+ 		{"record",  'r', 0, 0, "record events via sqlite3", 0},
+ #endif
+ 		{"foreground", 'f', 0, 0, "run foreground, not daemonize"},
++#ifdef HAVE_MCE
++		{"post-processing", 'p', 0, 0,
++		"Post-processing MCE's with raw register values"},
++#endif
+ 
+ 		{ 0, 0, 0, 0, 0, 0 }
+ 	};
+@@ -89,7 +172,9 @@ { 0, 0, 0, 0, 0, 0 }
+ 		.parser = parse_opt,
+ 		.doc = TOOL_DESCRIPTION,
+ 		.args_doc = ARGS_DOC,
+-
++#ifdef HAVE_MCE
++		.children = offline_parser,
++#endif
+ 	};
+ 	memset (&args, 0, sizeof(args));
+ 
+@@ -111,6 +196,13 @@ enable = (args.enable_ras > 0) ? 1 : 0;
+ 		return 0;
+ 	}
+ 
++#ifdef HAVE_MCE
++	if (args.offline) {
++		ras_offline_mce_event(&event);
++		return 0;
++	}
++#endif
++
+ 	openlog(TOOL_NAME, 0, LOG_DAEMON);
+ 	if (!args.foreground)
+ 		if (daemon(0,0))

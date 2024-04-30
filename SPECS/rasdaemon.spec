@@ -1,6 +1,6 @@
 Name:			rasdaemon
 Version:		0.6.7
-Release:		8%{?dist}
+Release:		9%{?dist}
 Summary:		Utility to receive RAS error tracings
 License:		GPLv2
 URL:			http://git.infradead.org/users/mchehab/rasdaemon.git
@@ -26,6 +26,13 @@ Patch17: 2b6a54b0d31e02e657171fd27f4e31d996756bc6.patch
 Patch18: 7ccf12f5ae26a055926d175d908c7930293438c4.patch
 Patch19: 9415b7449c70f5ea4a0209ddb89c2f5f392d3b4b.patch
 Patch20: d0e0bb3d73c4bc5060da20270a089857bba2a64c.patch
+Patch21: 30158ef8d7aebc3e5201bf39b73ce7644f8e419e.patch
+Patch22: aa36c96cd52d775570dae989dd95a060f1149077.patch
+Patch23: 932118b04a04104dfac6b8536419803f236e6118.patch
+Patch24: 1f74a59ee33b7448b00d7ba13d5ecd4918b9853c.patch
+Patch25: 2d15882a0cbfce0b905039bebc811ac8311cd739.patch
+Patch26: c785d309dcbdeb7ecd219975244f3944a8d047e9.patch
+Patch27: b6a64416ab31b66ce92cabcc7fa1f3c5e9db2e87.patch
 
 ExcludeArch:		s390 s390x
 BuildRequires:		make
@@ -81,6 +88,13 @@ an utility for reporting current error counts from the EDAC sysfs files.
 %patch18 -p1
 %patch19 -p1
 %patch20 -p1
+%patch21 -p1
+%patch22 -p1
+%patch23 -p1
+%patch24 -p1
+%patch25 -p1
+%patch26 -p1
+%patch27 -p1
 
 # The tarball is locked in time the first time aclocal was ran and will keep
 # requiring an older version of automake
@@ -116,6 +130,9 @@ sed -i "s/^PAGE_CE_ACTION=.*/PAGE_CE_ACTION=account/" %{buildroot}/%{_sysconfdir
 %{_sysconfdir}/sysconfig/rasdaemon
 
 %changelog
+* Thu Oct 26 2023 Aristeu Rozanski <aris@redhat.com> 0.6.7-9
+- Update SMCA support for AMD processors [RHEL-11092]
+
 * Tue May 03 2022 Aristeu Rozanski <aris@redhat.com> 0.6.7-8
 - Update ras-mc-ctl manpage to match current options [2079132]
 

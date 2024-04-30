@@ -1,0 +1,37 @@
+commit c785d309dcbdeb7ecd219975244f3944a8d047e9
+Author: Muralidhara M K <muralidhara.mk@amd.com>
+Date:   Thu Jul 27 10:18:12 2023 +0000
+
+    rasdaemon: Identify the DIe Number in multidie system
+    
+    Some AMD systems have 4 dies in each socket and Die ID represents
+    whether the error occured on cpu die or gpu die.
+    Also, respective Die used for FRU identification.
+    
+    Signed-off-by: Muralidhara M K <muralidhara.mk@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+diff --git a/mce-amd-smca.c b/mce-amd-smca.c
+index 54060ee..a20f03c 100644
+--- a/mce-amd-smca.c
++++ b/mce-amd-smca.c
+@@ -935,10 +935,15 @@ void decode_smca_error(struct mce_event *e, struct mce_priv *m)
+ 			     xec);
+ 
+ 	if ((bank_type == SMCA_UMC || bank_type == SMCA_UMC_QUIRK) && xec == 0) {
+-		channel = find_umc_channel(e);
+-		csrow = e->synd & 0x7; /* Bit 0, 1 ,2 */
+-		mce_snprintf(e->mc_location, "memory_channel=%d,csrow=%d",
+-			     channel, csrow);
++		if ((m->family == 0x19) && (m->model >= 0x90 && m->model <= 0x9f)) {
++			/* MCA_IPID[InstanceIdHi] give the AMD Node Die ID */
++			mce_snprintf(e->mc_location, "memory_die_id=%d", mcatype_instancehi / 4);
++		} else {
++			channel = find_umc_channel(e);
++			csrow = e->synd & 0x7; /* Bit 0, 1 ,2 */
++			mce_snprintf(e->mc_location, "memory_channel=%d,csrow=%d",
++				     channel, csrow);
++		}
+ 	}
+ 
+ 	if (bank_type == SMCA_UMC_V2 && xec == 0) {
