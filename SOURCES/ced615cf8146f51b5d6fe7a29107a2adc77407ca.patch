@@ -1,0 +1,94 @@
+commit ced615cf8146f51b5d6fe7a29107a2adc77407ca
+Author: Sathya Priya Kumar <sathyapriya.k@amd.com>
+Date:   Thu Jan 11 01:20:07 2024 -0600
+
+    rasdaemon: Add error decoding for MCA_CTL_SMU extended bits
+    
+    Enable error decoding support for the newly added extended
+    error bit descriptions from MCA_CTL_SMU.
+    b'0:11 can be decoded from existing array smca_smu2_mce_desc.
+    Define a function to append the newly defined b'58:62 to the
+    smca_smu2_mce_desc. This reduces the maintaining Reserved bits
+    from b'12:57 in the code.
+    
+    Signed-off-by: Sathya Priya Kumar <sathyapriya.k@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+---
+ mce-amd-smca.c    |   33 ++++++++++++++++++++++++++++++++-
+ ras-mce-handler.h |    1 +
+ 2 files changed, 33 insertions(+), 1 deletion(-)
+
+--- rasdaemon-0.6.7.orig/mce-amd-smca.c	2024-06-28 10:34:16.453522865 -0400
++++ rasdaemon-0.6.7/mce-amd-smca.c	2024-06-28 10:34:46.049124270 -0400
+@@ -397,7 +397,7 @@ static const char * const smca_smu_mce_d
+ 	"An ECC or parity error in an SMU RAM instance",
+ };
+ 
+-static const char * const smca_smu2_mce_desc[] = {
++static const char * smca_smu2_mce_desc[64] = {
+ 	"High SRAM ECC or parity error",
+ 	"Low SRAM ECC or parity error",
+ 	"Data Cache Bank A ECC or parity error",
+@@ -409,6 +409,15 @@ static const char * const smca_smu2_mce_
+ 	"Instruction Tag Cache Bank A ECC or parity error",
+ 	"Instruction Tag Cache Bank B ECC or parity error",
+ 	"System Hub Read Buffer ECC or parity error",
++	"PHY RAS ECC Error",
++};
++
++static const char * smca_smu2_ext_mce_desc[] = {
++	"A correctable error from a GFX Sub-IP",
++	"A fatal error from a GFX Sub-IP",
++	"Reserved",
++	"Reserved",
++	"A poison error from a GFX Sub-IP",
+ };
+ 
+ static const char * const smca_mp5_mce_desc[] = {
+@@ -815,6 +824,27 @@ static struct smca_bank_name smca_names[
+ 	[SMCA_GMI_PHY]			= { "Global Memory Interconnect PHY Unit" },
+ };
+ 
++void smca_smu2_ext_err_desc(void)
++{
++	int i, j;
++	int smu2_bits = 62;
++
++	/*
++	 * MCA_CTL_SMU error stings are defined for b'58:59 and b'62
++	 * in MI300A AMD systems. See AMD PPR MCA::SMU::MCA_CTL_SMU
++	 *
++	 * b'0:11 can be decoded from existing array smca_smu2_mce_desc.
++	 * b'12:57 are Reserved and b'58:62 are appended to the
++	 * smca_smu2_mce_desc.
++	 */
++	for (i = 12, j = 0; i < smu2_bits || j < 5; i++, j++) {
++		for ( ; i < 58; i++)
++			smca_smu2_mce_desc[i] = "Reserved";
++
++		smca_smu2_mce_desc[i] = smca_smu2_ext_mce_desc[j];
++	}
++}
++
+ void amd_decode_errcode(struct mce_event *e)
+ {
+ 
+@@ -906,6 +936,7 @@ unsigned short xec = (e->status >> 16) &
+ 	mcatype_hwid = HWID_MCATYPE(ipid_high & MCI_IPID_HWID,
+ 				    (ipid_high & MCI_IPID_MCATYPE) >> 16);
+ 
++	smca_smu2_ext_err_desc();
+ 	fixup_hwid(m, &mcatype_hwid);
+ 
+ 	for (i = 0; i < ARRAY_SIZE(smca_hwid_mcatypes); i++) {
+--- rasdaemon-0.6.7.orig/ras-mce-handler.h	2024-06-28 10:34:16.453522865 -0400
++++ rasdaemon-0.6.7/ras-mce-handler.h	2024-06-28 10:34:17.795508302 -0400
+@@ -121,6 +121,7 @@ int set_intel_imc_log(enum cputype cputy
+ /* Undertake AMD SMCA Error Decoding */
+ void decode_smca_error(struct mce_event *e, struct mce_priv *m);
+ void amd_decode_errcode(struct mce_event *e);
++void smca_smu2_ext_err_desc(void);
+ 
+ /* Per-CPU-type decoders for Intel CPUs */
+ void p4_decode_model(struct mce_event *e);

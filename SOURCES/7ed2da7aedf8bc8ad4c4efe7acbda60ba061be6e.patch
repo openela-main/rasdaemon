@@ -1,0 +1,34 @@
+commit 7ed2da7aedf8bc8ad4c4efe7acbda60ba061be6e
+Author: Aristeu Rozanski <arozansk@redhat.com>
+Date:   Tue Apr 9 10:06:30 2024 -0400
+
+    mce-amd-smca: update smca_hwid to use smca_bank_types
+    
+    bank_type is used as smca_bank_types everywhere, there's no point in
+    declaring it as unsigned int. It also upsets covscan:
+    
+            3. rasdaemon-0.6.7/mce-amd-smca.c:914: assignment: Assigning: "bank_type" = "s_hwid->bank_type".
+            7. rasdaemon-0.6.7/mce-amd-smca.c:926: cond_at_most: Checking "bank_type >= 64U" implies that "bank_type" and "s_hwid->bank_type" may be up to 63 on the false branch.
+            14. rasdaemon-0.6.7/mce-amd-smca.c:942: overrun-local: Overrunning array "smca_mce_descs" of 38 16-byte elements at element index 63 (byte offset 1023) using index "bank_type" (which evaluates to 63).
+            #   940|        /* Only print the descriptor of valid extended error code */
+            #   941|        if (xec < smca_mce_descs[bank_type].num_descs)
+            #   942|->              mce_snprintf(e->mcastatus_msg,
+            #   943|                             "%s. Ext Err Code: %d",
+            #   944|                             smca_mce_descs[bank_type].descs[xec],
+    
+    Signed-off-by: Aristeu Rozanski <arozansk@redhat.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+diff --git a/mce-amd-smca.c b/mce-amd-smca.c
+index 7521ff7..6632663 100644
+--- a/mce-amd-smca.c
++++ b/mce-amd-smca.c
+@@ -706,7 +706,7 @@ static struct smca_mce_desc smca_mce_descs[] = {
+ };
+ 
+ struct smca_hwid {
+-	unsigned int bank_type; /* Use with smca_bank_types for easy indexing.*/
++	enum smca_bank_types bank_type;
+ 	uint32_t mcatype_hwid;  /* mcatype,hwid bit 63-32 in MCx_IPID Register*/
+ };
+ 

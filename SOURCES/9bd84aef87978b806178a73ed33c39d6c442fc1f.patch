@@ -1,0 +1,24 @@
+commit 9bd84aef87978b806178a73ed33c39d6c442fc1f
+Author: weidong <weidongkl@sina.com>
+Date:   Tue Aug 8 08:59:12 2023 +0000
+
+    add ':' before error output
+    
+    All prints except disk are preceded by a colon
+    
+    Signed-off-by: weidong <weidongkl@sina.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+diff --git a/util/ras-mc-ctl.in b/util/ras-mc-ctl.in
+index dc326d3..13078c2 100755
+--- a/util/ras-mc-ctl.in
++++ b/util/ras-mc-ctl.in
+@@ -1469,7 +1469,7 @@ sub errors
+             $out .= "\n";
+         }
+         if ($out ne "") {
+-            print "Disk errors\n$out\n";
++            print "Disk errors:\n$out\n";
+         } else {
+             print "No disk errors.\n\n";
+         }

@@ -1,0 +1,22 @@
+commit 885e546add918457c453bd3f753ac7df90b39e36
+Author: weidongkl <weidongkl@sina.com>
+Date:   Tue Sep 19 16:29:21 2023 +0800
+
+    Add a space between "diskerror_event" and "store"
+    
+    Signed-off-by: weidongkl <weidongkl@sina.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+diff --git a/ras-record.c b/ras-record.c
+index a5f99ae..6b050bb 100644
+--- a/ras-record.c
++++ b/ras-record.c
+@@ -484,7 +484,7 @@ int ras_store_diskerror_event(struct ras_events *ras, struct diskerror_event *ev
+ 
+ 	if (!priv || !priv->stmt_diskerror_event)
+ 		return 0;
+-	log(TERM, LOG_INFO, "diskerror_eventstore: %p\n", priv->stmt_diskerror_event);
++	log(TERM, LOG_INFO, "diskerror_event store: %p\n", priv->stmt_diskerror_event);
+ 
+ 	sqlite3_bind_text(priv->stmt_diskerror_event,  1, ev->timestamp, -1, NULL);
+ 	sqlite3_bind_text(priv->stmt_diskerror_event,  2, ev->dev, -1, NULL);

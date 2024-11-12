@@ -1,8 +1,8 @@
 Name:			rasdaemon
 Version:		0.6.7
-Release:		9%{?dist}
+Release:		15%{?dist}
 Summary:		Utility to receive RAS error tracings
-License:		GPLv2
+License:		GPL-2.0-only
 URL:			http://git.infradead.org/users/mchehab/rasdaemon.git
 Source0:		http://www.infradead.org/~mchehab/rasdaemon/%{name}-%{version}.tar.bz2
 Patch0: labels.patch
@@ -33,6 +33,12 @@ Patch24: 1f74a59ee33b7448b00d7ba13d5ecd4918b9853c.patch
 Patch25: 2d15882a0cbfce0b905039bebc811ac8311cd739.patch
 Patch26: c785d309dcbdeb7ecd219975244f3944a8d047e9.patch
 Patch27: b6a64416ab31b66ce92cabcc7fa1f3c5e9db2e87.patch
+Patch28: 9c86f6255f67a8bae28cd46c54500fc16bfc7a30.patch
+Patch29: 9bd84aef87978b806178a73ed33c39d6c442fc1f.patch
+Patch30: 885e546add918457c453bd3f753ac7df90b39e36.patch
+Patch31: 7ed2da7aedf8bc8ad4c4efe7acbda60ba061be6e.patch
+Patch32: ced615cf8146f51b5d6fe7a29107a2adc77407ca.patch
+Patch33: 73d8177ce0d2fcb7693cacee4778d0845ebd3788.patch
 
 ExcludeArch:		s390 s390x
 BuildRequires:		make
@@ -95,6 +101,12 @@ an utility for reporting current error counts from the EDAC sysfs files.
 %patch25 -p1
 %patch26 -p1
 %patch27 -p1
+%patch28 -p1
+%patch29 -p1
+%patch30 -p1
+%patch31 -p1
+%patch32 -p1
+%patch33 -p1
 
 # The tarball is locked in time the first time aclocal was ran and will keep
 # requiring an older version of automake
@@ -130,6 +142,21 @@ sed -i "s/^PAGE_CE_ACTION=.*/PAGE_CE_ACTION=account/" %{buildroot}/%{_sysconfdir
 %{_sysconfdir}/sysconfig/rasdaemon
 
 %changelog
+* Thu Jul 18 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-14
+- rasdaemon: mce-amd-smca: Optimizing decoding of MCA_CTL_SMU bits [RHEL-48819]
+
+* Fri Jun 28 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-13
+- rasdaemon: Add error decoding for MCA_CTL_SMU extended bits [RHEL-35718]
+
+* Thu Jun 20 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-12
+- mce-amd-smca: update smca_hwid to use smca_bank_types [RHEL-24170]
+
+* Wed May 08 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-11
+- Fix excessive block messages [RHEL-8708]
+
+* Wed Jan 10 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-10
+- Update License string to use SPDX [RHELMISC-1262]
+
 * Thu Oct 26 2023 Aristeu Rozanski <aris@redhat.com> 0.6.7-9
 - Update SMCA support for AMD processors [RHEL-11092]
 

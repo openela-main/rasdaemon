@@ -1,0 +1,117 @@
+commit 9c86f6255f67a8bae28cd46c54500fc16bfc7a30
+Author: Yang Shi <shy828301@gmail.com>
+Date:   Mon Apr 4 16:34:05 2022 -0700
+
+    rasdaemon: use the new block_rq_error tracepoint
+    
+    Since Linux 5.18-rc1 a new block tracepoint called block_rq_error is
+    available for tracing disk error events dedicatedly.  Currently
+    rasdaemon is using block_rq_complete which also traces successful cases.
+    It incurs excessive tracing logs and somehow overhead since the event is
+    triggered quite often.
+    
+    Use the new tracepoint for disk error reporting, and the new trace point
+    has the same format as block_rq_complete.
+    
+    Signed-off-by: Yang Shi <shy828301@gmail.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+---
+ ras-events.c |   53 ++++++++++-------------------------------------------
+ ras-record.c |    2 +-
+ 2 files changed, 11 insertions(+), 44 deletions(-)
+
+--- rasdaemon-0.6.7.orig/ras-events.c	2024-05-14 11:05:40.020599541 -0400
++++ rasdaemon-0.6.7/ras-events.c	2024-05-14 11:06:38.831067957 -0400
+@@ -27,6 +27,7 @@ * Foundation, Inc., 51 Franklin Street,
+ #include <sys/poll.h>
+ #include <signal.h>
+ #include <sys/signalfd.h>
++#include <linux/version.h>
+ #include "libtrace/kbuffer.h"
+ #include "libtrace/event-parse.h"
+ #include "ras-mc-handler.h"
+@@ -229,7 +230,7 @@ if (rc < 0) {
+ #endif
+ 
+ #ifdef HAVE_DISKERROR
+-	rc |= __toggle_ras_mc_event(ras, "block", "block_rq_complete", enable);
++	rc |= __toggle_ras_mc_event(ras, "block", "block_rq_error", enable);
+ #endif
+ 
+ #ifdef HAVE_MEMORY_FAILURE
+@@ -241,37 +242,6 @@ free_ras:
+ 	return rc;
+ }
+ 
+-/*
+- * Set kernel filter. libtrace doesn't provide an API for setting filters
+- * in kernel, we have to implement it here.
+- */
+-static int filter_ras_mc_event(struct ras_events *ras, char *group, char *event,
+-			       const char *filter_str)
+-{
+-	int fd, rc;
+-	char fname[MAX_PATH + 1];
+-
+-	snprintf(fname, sizeof(fname), "events/%s/%s/filter", group, event);
+-	fd = open_trace(ras, fname, O_RDWR | O_APPEND);
+-	if (fd < 0) {
+-		log(ALL, LOG_WARNING, "Can't open filter file\n");
+-		return errno;
+-	}
+-
+-	rc = write(fd, filter_str ,strlen(filter_str));
+-	if (rc < 0) {
+-		log(ALL, LOG_WARNING, "Can't write to filter file\n");
+-		close(fd);
+-		return rc;
+-	}
+-	close(fd);
+-	if (!rc) {
+-		log(ALL, LOG_WARNING, "Nothing was written on filter file\n");
+-		return EIO;
+-	}
+-
+-	return 0;
+-}
+ 
+ /*
+  * Tracing read code
+@@ -901,17 +871,14 @@ (void)open("/sys/kernel/debug/ras/daemon
+ #endif
+ 
+ #ifdef HAVE_DISKERROR
+-	rc = filter_ras_mc_event(ras, "block", "block_rq_complete", "error != 0");
+-	if (!rc) {
+-		rc = add_event_handler(ras, pevent, page_size, "block",
+-				       "block_rq_complete", ras_diskerror_event_handler,
+-					NULL, DISKERROR_EVENT);
+-		if (!rc)
+-			num_events++;
+-		else
+-			log(ALL, LOG_ERR, "Can't get traces from %s:%s\n",
+-			    "block", "block_rq_complete");
+-	}
++	rc = add_event_handler(ras, pevent, page_size, "block",
++			       "block_rq_error", ras_diskerror_event_handler,
++				NULL, DISKERROR_EVENT);
++	if (!rc)
++		num_events++;
++	else
++		log(ALL, LOG_ERR, "Can't get traces from %s:%s\n",
++		    "block", "block_rq_error");
+ #endif
+ 
+ #ifdef HAVE_MEMORY_FAILURE
+--- rasdaemon-0.6.7.orig/ras-record.c	2024-05-14 11:07:24.573654494 -0400
++++ rasdaemon-0.6.7/ras-record.c	2024-05-14 11:07:07.626807674 -0400
+@@ -456,7 +456,7 @@ return 0;
+ #endif
+ 
+ /*
+- * Table and functions to handle block:block_rq_complete
++ * Table and functions to handle block:block_rq_error
+  */
+ 
+ #ifdef HAVE_DISKERROR
