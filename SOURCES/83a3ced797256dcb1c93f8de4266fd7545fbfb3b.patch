@@ -1,0 +1,95 @@
+commit 83a3ced797256dcb1c93f8de4266fd7545fbfb3b
+Author: Avadhut Naik <avadnaik@amd.com>
+Date:   Tue Nov 21 14:04:19 2023 -0600
+
+    rasdaemon: Add support for vendor-specific machine check error information
+    
+    Some CPU vendors may provide additional vendor-specific machine check
+    error information. AMD, for example, provides FRU Text through SYND 1/2
+    registers if BIT 9 of SMCA_CONFIG register is set.
+    
+    Add support to display the additional vendor-specific error information,
+    if any.
+    
+    Signed-off-by: Avadhut Naik <Avadhut.Naik@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+---
+ mce-amd-smca.c    |   12 ++++++++++++
+ ras-mce-handler.c |   22 ++++++++++++++++++++++
+ ras-mce-handler.h |    3 +++
+ 3 files changed, 37 insertions(+)
+
+--- rasdaemon-0.6.7.orig/mce-amd-smca.c	2024-11-27 10:18:13.765255836 -0500
++++ rasdaemon-0.6.7/mce-amd-smca.c	2024-11-27 10:18:23.014169756 -0500
+@@ -999,6 +999,18 @@ if (bank_type == SMCA_UMC_V2 && xec == 0
+ 			     channel, csrow);
+ 	}
+ 
++
++	if (e->vdata_len) {
++		uint64_t smca_config = e->vdata[2];
++
++		/*
++		 * BIT 9 of the CONFIG register of a few SMCA Bank types indicates
++		 * presence of FRU Text in SYND 1 / 2 registers
++		 */
++		if (smca_config & BIT(9))
++			memcpy(e->frutext, e->vdata, 16);
++	}
++
+ }
+ 
+ int parse_amd_smca_event(struct ras_events *ras, struct mce_event *e)
+--- rasdaemon-0.6.7.orig/ras-mce-handler.c	2024-11-27 10:18:23.014169756 -0500
++++ rasdaemon-0.6.7/ras-mce-handler.c	2024-11-27 10:19:38.849463954 -0500
+@@ -375,6 +375,25 @@ #if 0
+ 	if (e->microcode)
+ 		trace_seq_printf(s, ", microcode= %x", e->microcode);
+ 
++	if (!e->vdata_len)
++		return;
++
++	if (strlen(e->frutext)) {
++		trace_seq_printf(s, ", FRU Text= %s", e->frutext);
++		trace_seq_printf(s, ", Vendor Data= ");
++		for (int i = 2; i < e->vdata_len/8; i++) {
++			trace_seq_printf(s, "0x%lx", e->vdata[i]);
++			trace_seq_printf(s, " ");
++		}
++	} else {
++		trace_seq_printf(s, ", Vendor Data= ");
++		for (int i = 0; i < e->vdata_len/8; i ++) {
++			trace_seq_printf(s, "0x%lx", e->vdata[i]);
++			trace_seq_printf(s, " ");
++		}
++	}
++
++
+ 	/*
+ 	 * FIXME: The original mcelog userspace tool uses DMI to map from
+ 	 * address to DIMM. From the comments there, the code there doesn't
+@@ -559,6 +578,9 @@ if (pevent_get_field_val(s, event, "ipid
+ 	if (!pevent_get_field_val(s, event, "microcode", record, &val, 1))
+ 		e.microcode = val;
+ 
++	/* Get Vendor-specfic Data, if any */
++	e.vdata = pevent_get_field_raw(s, event, "v_data", record, &e.vdata_len, 1);
++
+ 	switch (mce->cputype) {
+ 	case CPU_GENERIC:
+ 		break;
+--- rasdaemon-0.6.7.orig/ras-mce-handler.h	2024-11-27 10:18:23.014169756 -0500
++++ rasdaemon-0.6.7/ras-mce-handler.h	2024-11-27 10:20:05.249218250 -0500
+@@ -76,8 +76,11 @@ struct mce_event {
+ 	uint64_t        ipid;   /* MCA_IPID MSR: only valid on SMCA systems */
+ 	uint64_t 	ppin;
+ 	uint32_t	microcode;
++	int32_t		vdata_len;
++	const uint64_t	*vdata;
+ 
+ 	/* Parsed data */
++	char		frutext[17];
+ 	char		timestamp[64];
+ 	char		bank_name[64];
+ 	char		error_msg[4096];

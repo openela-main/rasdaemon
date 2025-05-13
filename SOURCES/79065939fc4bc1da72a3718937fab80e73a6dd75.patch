@@ -1,0 +1,128 @@
+commit 79065939fc4bc1da72a3718937fab80e73a6dd75
+Author: Avadhut Naik <avadhut.naik@amd.com>
+Date:   Tue Apr 2 00:07:38 2024 -0500
+
+    rasdaemon: Add support to parse microcode field of mce tracepoint
+    
+    Support for exporting the Microcode Revision is being added to the
+    mce_record tracepoint.
+    
+    Add the required, corresponding support in the rasdaemon for the field
+    to be parsed and logged or added to the database and viewed later through
+    ras-mc-ctl utility.
+    
+    Signed-off-by: Avadhut Naik <avadhut.naik@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+---
+ ras-mce-handler.c  |    7 +++++++
+ ras-mce-handler.h  |    1 +
+ ras-record.c       |   20 +++++++++++---------
+ util/ras-mc-ctl.in |    7 ++++---
+ 4 files changed, 23 insertions(+), 12 deletions(-)
+
+--- rasdaemon-0.6.7.orig/ras-mce-handler.c	2024-08-22 14:44:51.352160832 -0400
++++ rasdaemon-0.6.7/ras-mce-handler.c	2024-08-22 14:44:51.361160757 -0400
+@@ -372,6 +372,9 @@ #if 0
+ 	if (e->ppin)
+ 		trace_seq_printf(s, ", ppin= %llx", (long long)e->ppin);
+ 
++	if (e->microcode)
++		trace_seq_printf(s, ", microcode= %x", e->microcode);
++
+ 	/*
+ 	 * FIXME: The original mcelog userspace tool uses DMI to map from
+ 	 * address to DIMM. From the comments there, the code there doesn't
+@@ -552,6 +555,10 @@ if (pevent_get_field_val(s, event, "ipid
+ 	if (!pevent_get_field_val(s, event, "ppin", record, &val, 1))
+ 		e.ppin = val;
+ 
++	/* Get Microcode Revision */
++	if (!pevent_get_field_val(s, event, "microcode", record, &val, 1))
++		e.microcode = val;
++
+ 	switch (mce->cputype) {
+ 	case CPU_GENERIC:
+ 		break;
+--- rasdaemon-0.6.7.orig/ras-mce-handler.h	2024-08-22 14:44:51.352160832 -0400
++++ rasdaemon-0.6.7/ras-mce-handler.h	2024-08-22 14:44:51.361160757 -0400
+@@ -75,6 +75,7 @@ struct mce_event {
+ 	uint64_t        synd;   /* MCA_SYND MSR: only valid on SMCA systems */
+ 	uint64_t        ipid;   /* MCA_IPID MSR: only valid on SMCA systems */
+ 	uint64_t 	ppin;
++	uint32_t	microcode;
+ 
+ 	/* Parsed data */
+ 	char		timestamp[64];
+--- rasdaemon-0.6.7.orig/ras-record.c	2024-08-22 14:44:51.353160824 -0400
++++ rasdaemon-0.6.7/ras-record.c	2024-08-22 14:44:51.362160748 -0400
+@@ -338,11 +338,12 @@ { .name = "ppin",			.type = "INTEGER" },
+ 		{ .name="cs",			.type="INTEGER" }, //15
+ 		{ .name="bank",			.type="INTEGER" },
+ 		{ .name="cpuvendor",		.type="INTEGER" },
++		{ .name = "microcode",      .type = "INTEGER" },
+ 
+ 		/* Parsed data - will likely change */
+ 		{ .name="bank_name",		.type="TEXT" },
+-		{ .name="error_msg",		.type="TEXT" },
+-		{ .name="mcgstatus_msg",	.type="TEXT" }, // 20
++		{ .name="error_msg",		.type="TEXT" }, // 20
++		{ .name="mcgstatus_msg",	.type="TEXT" },
+ 		{ .name="mcistatus_msg",	.type="TEXT" },
+ 		{ .name="mcastatus_msg",	.type="TEXT" },
+ 		{ .name="user_action",		.type="TEXT" },
+@@ -381,14 +382,15 @@ sqlite3_bind_int64(priv->stmt_mce_record
+ 	sqlite3_bind_int   (priv->stmt_mce_record, 15, ev->cs);
+ 	sqlite3_bind_int   (priv->stmt_mce_record, 16, ev->bank);
+ 	sqlite3_bind_int   (priv->stmt_mce_record, 17, ev->cpuvendor);
++	sqlite3_bind_int   (priv->stmt_mce_record, 18, ev->microcode);
+ 
+-	sqlite3_bind_text(priv->stmt_mce_record, 18, ev->bank_name, -1, NULL);
+-	sqlite3_bind_text(priv->stmt_mce_record, 19, ev->error_msg, -1, NULL);
+-	sqlite3_bind_text(priv->stmt_mce_record, 20, ev->mcgstatus_msg, -1, NULL);
+-	sqlite3_bind_text(priv->stmt_mce_record, 21, ev->mcistatus_msg, -1, NULL);
+-	sqlite3_bind_text(priv->stmt_mce_record, 22, ev->mcastatus_msg, -1, NULL);
+-	sqlite3_bind_text(priv->stmt_mce_record, 23, ev->user_action, -1, NULL);
+-	sqlite3_bind_text(priv->stmt_mce_record, 24, ev->mc_location, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mce_record, 19, ev->bank_name, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mce_record, 20, ev->error_msg, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mce_record, 21, ev->mcgstatus_msg, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mce_record, 22, ev->mcistatus_msg, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mce_record, 23, ev->mcastatus_msg, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mce_record, 24, ev->user_action, -1, NULL);
++	sqlite3_bind_text(priv->stmt_mce_record, 25, ev->mc_location, -1, NULL);
+ 
+ 	rc = sqlite3_step(priv->stmt_mce_record);
+ 	if (rc != SQLITE_OK && rc != SQLITE_DONE)
+--- rasdaemon-0.6.7.orig/util/ras-mc-ctl.in	2024-08-22 14:44:51.353160824 -0400
++++ rasdaemon-0.6.7/util/ras-mc-ctl.in	2024-08-22 14:44:51.362160748 -0400
+@@ -1317,7 +1317,7 @@ sub errors
+ {
+     require DBI;
+     my ($query, $query_handle, $id, $time, $devname, $count, $type, $msg, $label, $mc, $top, $mid, $low, $addr, $grain, $syndrome, $detail, $out);
+-    my ($mcgcap,$mcgstatus, $status, $misc, $ip, $tsc, $walltime, $ppin, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $bank_name, $mcgstatus_msg, $mcistatus_msg, $mcastatus_msg, $user_action, $mc_location);
++    my ($mcgcap,$mcgstatus, $status, $misc, $ip, $tsc, $walltime, $ppin, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $microcode, $bank_name, $mcgstatus_msg, $mcistatus_msg, $mcastatus_msg, $user_action, $mc_location);
+     my ($timestamp, $etype, $severity, $etype_string, $severity_string, $fru_id, $fru_text, $cper_data);
+     my ($bus_name, $dev_name, $driver_name, $reporter_name);
+     my ($dev, $sector, $nr_sector, $error, $rwbs, $cmd);
+@@ -1485,10 +1485,10 @@ $out .= sprintf "address=0x%08x, ", $add
+ 
+     # MCE mce_record errors
+     if ($has_mce == 1) {
+-        $query = "select id, timestamp, mcgcap, mcgstatus, status, addr, misc, ip, tsc, walltime, ppin, cpu, cpuid, apicid, socketid, cs, bank, cpuvendor, bank_name, error_msg, mcgstatus_msg, mcistatus_msg, mcastatus_msg, user_action, mc_location from mce_record order by id";
++        $query = "select id, timestamp, mcgcap, mcgstatus, status, addr, misc, ip, tsc, walltime, ppin, cpu, cpuid, apicid, socketid, cs, bank, cpuvendor, microcode, bank_name, error_msg, mcgstatus_msg, mcistatus_msg, mcastatus_msg, user_action, mc_location from mce_record order by id";
+         $query_handle = $dbh->prepare($query);
+         $query_handle->execute();
+-        $query_handle->bind_columns(\($id, $time, $mcgcap,$mcgstatus, $status, $addr, $misc, $ip, $tsc, $walltime, $ppin, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $bank_name, $msg, $mcgstatus_msg, $mcistatus_msg, $mcastatus_msg, $user_action, $mc_location));
++        $query_handle->bind_columns(\($id, $time, $mcgcap,$mcgstatus, $status, $addr, $misc, $ip, $tsc, $walltime, $ppin, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $microcode, $bank_name, $msg, $mcgstatus_msg, $mcistatus_msg, $mcastatus_msg, $user_action, $mc_location));
+         $out = "";
+         while($query_handle->fetch()) {
+             $out .= "$id $time error: $msg";
+@@ -1514,6 +1514,7 @@ $out .= sprintf ", apicid=0x%08x", $apic
+ 	    $out .= sprintf ", socketid=0x%08x", $socketid if ($socketid);
+ 	    $out .= sprintf ", cs=0x%08x", $cs if ($cs);
+ 	    $out .= sprintf ", bank=0x%08x", $bank if ($bank);
++		$out .= sprintf ", microcode=0x%08x", $microcode if ($microcode);
+ 
+ 	    $out .= "\n";
+         }

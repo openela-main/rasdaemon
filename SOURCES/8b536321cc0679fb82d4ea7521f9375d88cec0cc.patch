@@ -1,0 +1,75 @@
+commit 8b536321cc0679fb82d4ea7521f9375d88cec0cc
+Author: Avadhut Naik <avadhut.naik@amd.com>
+Date:   Thu Nov 7 06:24:44 2024 +0000
+
+    rasdaemon: Modify support for vendor-specific machine check error information
+    
+    Commit 83a3ced797256d ("rasdaemon: Add support for vendor-specific
+    machine check error information") assumes that MCA_CONFIG MSR will be
+    exported as part of vendor-specific error information through the MCE
+    tracepoint.
+    
+    The same, however, is not true anymore. MCA_CONFIG MSR will not be
+    exported through the MCE tracepoint. Instead, the data from MCA_SYND1/2
+    MSRs, exported as vendor-specific error information on newer AMD SOCs,
+    should always be interpreted as FRUText.
+    
+    Modify the error decoding support accordingly.
+    
+    Fixes: 83a3ced797256d ("rasdaemon: Add support for vendor-specific
+    machine check error information")
+    Signed-off-by: Avadhut Naik <avadhut.naik@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+---
+ mce-amd-smca.c    |   13 ++-----------
+ ras-mce-handler.c |   15 +--------------
+ 2 files changed, 3 insertions(+), 25 deletions(-)
+
+--- rasdaemon-0.6.7.orig/mce-amd-smca.c	2024-11-27 10:20:29.777989960 -0500
++++ rasdaemon-0.6.7/mce-amd-smca.c	2024-11-27 10:21:28.731441278 -0500
+@@ -1000,17 +1000,8 @@ if (bank_type == SMCA_UMC_V2 && xec == 0
+ 	}
+ 
+ 
+-	if (e->vdata_len) {
+-		uint64_t smca_config = e->vdata[2];
+-
+-		/*
+-		 * BIT 9 of the CONFIG register of a few SMCA Bank types indicates
+-		 * presence of FRU Text in SYND 1 / 2 registers
+-		 */
+-		if (smca_config & BIT(9))
+-			memcpy(e->frutext, e->vdata, 16);
+-	}
+-
++	if (e->vdata_len)
++		memcpy(e->frutext, e->vdata, 16);
+ }
+ 
+ int parse_amd_smca_event(struct ras_events *ras, struct mce_event *e)
+--- rasdaemon-0.6.7.orig/ras-mce-handler.c	2024-11-27 10:20:29.777989960 -0500
++++ rasdaemon-0.6.7/ras-mce-handler.c	2024-11-27 10:21:01.517694557 -0500
+@@ -378,21 +378,8 @@ #if 0
+ 	if (!e->vdata_len)
+ 		return;
+ 
+-	if (strlen(e->frutext)) {
++	if (strlen(e->frutext))
+ 		trace_seq_printf(s, ", FRU Text= %s", e->frutext);
+-		trace_seq_printf(s, ", Vendor Data= ");
+-		for (int i = 2; i < e->vdata_len/8; i++) {
+-			trace_seq_printf(s, "0x%lx", e->vdata[i]);
+-			trace_seq_printf(s, " ");
+-		}
+-	} else {
+-		trace_seq_printf(s, ", Vendor Data= ");
+-		for (int i = 0; i < e->vdata_len/8; i ++) {
+-			trace_seq_printf(s, "0x%lx", e->vdata[i]);
+-			trace_seq_printf(s, " ");
+-		}
+-	}
+-
+ 
+ 	/*
+ 	 * FIXME: The original mcelog userspace tool uses DMI to map from

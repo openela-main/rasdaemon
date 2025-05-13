@@ -1,0 +1,56 @@
+commit b1ace39286e287282a275b6edc90dc2f64e60a3c
+Author: Avadhut Naik <avadhut.naik@amd.com>
+Date:   Mon Mar 25 23:06:08 2024 -0500
+
+    rasdaemon: ras-mc-ctl: Add support to display mcastatus_msg string
+    
+    Currently, the mcastatus_msg string of struct mce_event is added to the
+    SQLite database by the rasdaemon when it is recording errors. The same
+    however, is not outputted by the ras-mc-ctl utility.
+    
+    The string provides important error information relating to the received
+    MCE. For example, on AMD SMCA systems, the string outputs extended error
+    code and description. As such, the string should be present in the
+    output of ras-mc-ctl utility.
+    
+    Add support to output the string through the ras-mc-ctl utility.
+    
+    Signed-off-by: Avadhut Naik <avadhut.naik@amd.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab+huawei@kernel.org>
+
+---
+ util/ras-mc-ctl.in |    7 ++++---
+ 1 file changed, 4 insertions(+), 3 deletions(-)
+
+--- rasdaemon-0.6.7.orig/util/ras-mc-ctl.in	2024-08-19 15:08:29.246429487 -0400
++++ rasdaemon-0.6.7/util/ras-mc-ctl.in	2024-08-19 15:10:55.478162148 -0400
+@@ -1317,7 +1317,7 @@ sub errors
+ {
+     require DBI;
+     my ($query, $query_handle, $id, $time, $devname, $count, $type, $msg, $label, $mc, $top, $mid, $low, $addr, $grain, $syndrome, $detail, $out);
+-    my ($mcgcap,$mcgstatus, $status, $misc, $ip, $tsc, $walltime, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $bank_name, $mcgstatus_msg, $mcistatus_msg, $user_action, $mc_location);
++    my ($mcgcap,$mcgstatus, $status, $misc, $ip, $tsc, $walltime, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $bank_name, $mcgstatus_msg, $mcistatus_msg, $mcastatus_msg, $user_action, $mc_location);
+     my ($timestamp, $etype, $severity, $etype_string, $severity_string, $fru_id, $fru_text, $cper_data);
+     my ($bus_name, $dev_name, $driver_name, $reporter_name);
+     my ($dev, $sector, $nr_sector, $error, $rwbs, $cmd);
+@@ -1485,10 +1485,10 @@ $out .= sprintf "address=0x%08x, ", $add
+ 
+     # MCE mce_record errors
+     if ($has_mce == 1) {
+-        $query = "select id, timestamp, mcgcap, mcgstatus, status, addr, misc, ip, tsc, walltime, cpu, cpuid, apicid, socketid, cs, bank, cpuvendor, bank_name, error_msg, mcgstatus_msg, mcistatus_msg, user_action, mc_location from mce_record order by id";
++        $query = "select id, timestamp, mcgcap, mcgstatus, status, addr, misc, ip, tsc, walltime, cpu, cpuid, apicid, socketid, cs, bank, cpuvendor, bank_name, error_msg, mcgstatus_msg, mcistatus_msg, mcastatus_msg, user_action, mc_location from mce_record order by id";
+         $query_handle = $dbh->prepare($query);
+         $query_handle->execute();
+-        $query_handle->bind_columns(\($id, $time, $mcgcap,$mcgstatus, $status, $addr, $misc, $ip, $tsc, $walltime, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $bank_name, $msg, $mcgstatus_msg, $mcistatus_msg, $user_action, $mc_location));
++        $query_handle->bind_columns(\($id, $time, $mcgcap,$mcgstatus, $status, $addr, $misc, $ip, $tsc, $walltime, $cpu, $cpuid, $apicid, $socketid, $cs, $bank, $cpuvendor, $bank_name, $msg, $mcgstatus_msg, $mcistatus_msg, $mcastatus_msg, $user_action, $mc_location));
+         $out = "";
+         while($query_handle->fetch()) {
+             $out .= "$id $time error: $msg";
+@@ -1496,6 +1496,7 @@ $out .= sprintf "address=0x%08x, ", $add
+ 	    $out .= ", bank $bank_name" if ($bank_name);
+ 	    $out .= ", mcg $mcgstatus_msg" if ($mcgstatus_msg);
+ 	    $out .= ", mci $mcistatus_msg" if ($mcistatus_msg);
++		$out .= ", mca $mcastatus_msg" if ($mcastatus_msg);
+ 	    $out .= ", $mc_location" if ($mc_location);
+ 	    $out .= ", $user_action" if ($user_action);
+ 	    $out .= sprintf ", mcgcap=0x%08x", $mcgcap if ($mcgcap);

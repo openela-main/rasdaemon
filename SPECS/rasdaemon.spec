@@ -1,6 +1,6 @@
 Name:			rasdaemon
 Version:		0.6.7
-Release:		15%{?dist}
+Release:		18%{?dist}
 Summary:		Utility to receive RAS error tracings
 License:		GPL-2.0-only
 URL:			http://git.infradead.org/users/mchehab/rasdaemon.git
@@ -39,6 +39,13 @@ Patch30: 885e546add918457c453bd3f753ac7df90b39e36.patch
 Patch31: 7ed2da7aedf8bc8ad4c4efe7acbda60ba061be6e.patch
 Patch32: ced615cf8146f51b5d6fe7a29107a2adc77407ca.patch
 Patch33: 73d8177ce0d2fcb7693cacee4778d0845ebd3788.patch
+Patch34: ad0444190e02bca309a61a4bad51bc0e16c0aef5.patch
+Patch35: b1ace39286e287282a275b6edc90dc2f64e60a3c.patch
+Patch36: 045ab08eaa00172d50621df9502f6910f3fe3af4.patch
+Patch37: 79065939fc4bc1da72a3718937fab80e73a6dd75.patch
+Patch38: 794530fbf270eae9f6f43c6d0bbd3ec6f2b210f3.patch
+Patch39: 83a3ced797256dcb1c93f8de4266fd7545fbfb3b.patch
+Patch40: 8b536321cc0679fb82d4ea7521f9375d88cec0cc.patch
 
 ExcludeArch:		s390 s390x
 BuildRequires:		make
@@ -107,6 +114,13 @@ an utility for reporting current error counts from the EDAC sysfs files.
 %patch31 -p1
 %patch32 -p1
 %patch33 -p1
+%patch34 -p1
+%patch35 -p1
+%patch36 -p1
+%patch37 -p1
+%patch38 -p1
+%patch39 -p1
+%patch40 -p1
 
 # The tarball is locked in time the first time aclocal was ran and will keep
 # requiring an older version of automake
@@ -142,7 +156,19 @@ sed -i "s/^PAGE_CE_ACTION=.*/PAGE_CE_ACTION=account/" %{buildroot}/%{_sysconfdir
 %{_sysconfdir}/sysconfig/rasdaemon
 
 %changelog
-* Thu Jul 18 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-14
+* Wed Nov 27 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-18
+- Add support for vendor specific information [RHEL-68673]
+
+* Tue Nov 19 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-17
+- ras-events: quit loop in read_ras_event when kbuf data is broken [RHEL-68127]
+
+* Thu Sep 05 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-16
+- rasdaemon: Add support to parse the PPIN field of mce tracepoint  [RHEL-52911]
+- rasdaemon: Add support to parse microcode field of mce tracepoint [RHEL-52911]
+- rasdaemon: Update SMCA bank error descriptions [RHEL-52911]
+- rasdaemon: ras-mc-ctl: Add support to display mcastatus_msg string [RHEL-52911]
+
+* Thu Jul 18 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-15
 - rasdaemon: mce-amd-smca: Optimizing decoding of MCA_CTL_SMU bits [RHEL-48819]
 
 * Fri Jun 28 2024 Aristeu Rozanski <aris@redhat.com> 0.6.7-13

@@ -1,0 +1,35 @@
+commit 794530fbf270eae9f6f43c6d0bbd3ec6f2b210f3
+Author: hubin <hubin73@huawei.com>
+Date:   Thu May 18 16:14:41 2023 +0800
+
+    ras-events: quit loop in read_ras_event when kbuf data is broken
+    
+    when kbuf data is broken, kbuffer_next_event() may move kbuf->index back to
+    the current kbuf->index position, causing dead loop.
+    
+    In this situation, rasdaemon will repeatedly parse an invalid event, and
+    print warning like "ug! negative record size -8!", pushing cpu utilization
+    rate to 100%.
+    
+    when kbuf data is broken, discard current page and continue reading next page
+    kbuf.
+    
+    Signed-off-by: hubin <hubin73@huawei.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+diff --git a/ras-events.c b/ras-events.c
+index 2662467..fced7ab 100644
+--- a/ras-events.c
++++ b/ras-events.c
+@@ -512,6 +512,11 @@ static int read_ras_event_all_cpus(struct pthread_data *pdata,
+ 				kbuffer_load_subbuffer(kbuf, page);
+ 
+ 				while ((data = kbuffer_read_event(kbuf, &time_stamp))) {
++					if (kbuffer_curr_size(kbuf) < 0) {
++						log(TERM, LOG_ERR, "invalid kbuf data, discard\n");
++						break;
++					}
++
+ 					parse_ras_data(&pdata[i],
+ 						       kbuf, data, time_stamp);
+ 
