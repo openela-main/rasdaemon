@@ -1,0 +1,75 @@
+commit 25ef3044f38224d653d880fb9f20be9e7c9bf570
+Author: Shiju Jose <shiju.jose@huawei.com>
+Date:   Mon Feb 12 10:38:51 2024 +0000
+
+    rasdaemon: ras-mc-ctl: Add support for CXL overflow trace events
+    
+    Add support for CXL overflow events to the ras-mc-ctl tool.
+    
+    Signed-off-by: Shiju Jose <shiju.jose@huawei.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+    (cherry picked from commit b22cb067755f4604770f9864a0babed8f93a1553)
+
+diff --git a/util/ras-mc-ctl.in b/util/ras-mc-ctl.in
+index 9519279..6a319a7 100755
+--- a/util/ras-mc-ctl.in
++++ b/util/ras-mc-ctl.in
+@@ -1366,6 +1366,22 @@ sub summary
+             print "No CXL AER correctable errors.\n\n";
+         }
+         $query_handle->finish;
++
++        # CXL overflow errors
++        $query = "select memdev, count(*) from cxl_overflow_event$conf{opt}{since} group by memdev";
++        $query_handle = $dbh->prepare($query);
++        $query_handle->execute();
++        $query_handle->bind_columns(\($memdev, $count));
++        $out = "";
++        while($query_handle->fetch()) {
++            $out .= "\t$memdev errors: $count\n";
++        }
++        if ($out ne "") {
++            print "CXL overflow events summary:\n$out\n";
++        } else {
++            print "No CXL overflow errors.\n\n";
++        }
++        $query_handle->finish;
+     }
+ 
+     # extlog errors
+@@ -1474,6 +1490,7 @@ sub errors
+     my ($error_count, $affinity, $mpidr, $r_state, $psci_state);
+     my ($pfn, $page_type, $action_result);
+     my ($memdev, $host, $serial, $error_status, $first_error, $header_log);
++    my ($log_type, $first_ts, $last_ts);
+ 
+     my $dbh = DBI->connect("dbi:SQLite:dbname=$dbname", "", "", {});
+ 
+@@ -1598,6 +1615,27 @@ sub errors
+             print "No CXL AER correctable errors.\n\n";
+         }
+         $query_handle->finish;
++
++        # CXL overflow errors
++        $query = "select id, timestamp, memdev, host, serial, log_type, count, first_ts, last_ts from cxl_overflow_event$conf{opt}{since} order by id";
++        $query_handle = $dbh->prepare($query);
++        $query_handle->execute();
++        $query_handle->bind_columns(\($id, $timestamp, $memdev, $host, $serial, $log_type, $count, $first_ts, $last_ts));
++        $out = "";
++        while($query_handle->fetch()) {
++            $out .= "$id $timestamp error: ";
++            $out .= "memdev=$memdev, "  if (defined $memdev && length $memdev);
++            $out .= "host=$host, " if (defined $host && length $host);
++            $out .= sprintf "serial=0x%llx, ", $serial if (defined $serial && length $serial);
++            $out .= "log=$log_type, " if (defined $log_type && length $log_type);
++            $out .= sprintf "%u records from $first_ts to $last_ts", $count if (defined $count && length $count);
++            $out .= "\n";
++        }
++        if ($out ne "") {
++            print "CXL overflow events:\n$out\n";
++        } else {
++            print "No CXL overflow errors.\n\n";
++        }
+     }
+ 
+     # Extlog errors

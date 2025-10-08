@@ -1,0 +1,42 @@
+commit d3836aa061f677232f99c514247d3dbf80812a1b
+Author: Shiju Jose <shiju.jose@huawei.com>
+Date:   Mon Jan 16 17:13:32 2023 +0000
+
+    rasdaemon: Move definition for BIT and BIT_ULL to a common file
+    
+    Move definition for BIT() and BIT_ULL() to the
+    common file ras-record.h
+    
+    Signed-off-by: Shiju Jose <shiju.jose@huawei.com>
+    Reviewed-by: Jonathan Cameron <Jonathan.Cameron@huawei.com>
+    Reviewed-by: Dave Jiang <dave.jiang@intel.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+diff --git a/ras-non-standard-handler.h b/ras-non-standard-handler.h
+index 4d9f938..c360eaf 100644
+--- a/ras-non-standard-handler.h
++++ b/ras-non-standard-handler.h
+@@ -17,9 +17,6 @@
+ #include "ras-events.h"
+ #include <traceevent/event-parse.h>
+ 
+-#define BIT(nr)                 (1UL << (nr))
+-#define BIT_ULL(nr)             (1ULL << (nr))
+-
+ struct ras_ns_ev_decoder {
+ 	struct ras_ns_ev_decoder *next;
+ 	const char *sec_type;
+diff --git a/ras-record.h b/ras-record.h
+index d9f7733..219f10b 100644
+--- a/ras-record.h
++++ b/ras-record.h
+@@ -25,6 +25,9 @@
+ 
+ #define ARRAY_SIZE(x) (sizeof(x)/sizeof(*(x)))
+ 
++#define BIT(nr)                 (1UL << (nr))
++#define BIT_ULL(nr)             (1ULL << (nr))
++
+ extern long user_hz;
+ 
+ struct ras_events;

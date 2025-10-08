@@ -1,0 +1,78 @@
+commit 8f79833e3d78424f4a594985fbeb91890f4af81c
+Author: Shiju Jose <shiju.jose@huawei.com>
+Date:   Mon Mar 4 11:49:50 2024 +0000
+
+    rasdaemon: Fix build warnings unused variable if AMP RAS errors is not enabled
+    
+    This patch fixes following build warnings unused variable if AMP RAS errors
+    is not enabled(--enable-amp-ns-decode).
+    
+    ==================================================
+    ras-aer-handler.c: In function ‘ras_aer_event_handler’:
+    ras-aer-handler.c:72:21: warning: unused variable ‘fn’ [-Wunused-variable]
+      int seg, bus, dev, fn;
+                         ^~
+    ras-aer-handler.c:72:16: warning: unused variable ‘dev’ [-Wunused-variable]
+      int seg, bus, dev, fn;
+                    ^~~
+    ras-aer-handler.c:72:11: warning: unused variable ‘bus’ [-Wunused-variable]
+      int seg, bus, dev, fn;
+               ^~~
+    ras-aer-handler.c:72:6: warning: unused variable ‘seg’ [-Wunused-variable]
+      int seg, bus, dev, fn;
+          ^~~
+    ras-aer-handler.c:71:10: warning: variable ‘sel_data’ set but not used [-Wunused-but-set-variable]
+      uint8_t sel_data[5];
+              ^~~~~~~~
+    ras-aer-handler.c:70:7: warning: unused variable ‘ipmi_add_sel’ [-Wunused-variable]
+      char ipmi_add_sel[105];
+           ^~~~~~~~~~~~
+    ==================================================
+    
+    Signed-off-by: Shiju Jose <shiju.jose@huawei.com>
+    Signed-off-by: Mauro Carvalho Chehab <mchehab@kernel.org>
+
+diff --git a/ras-aer-handler.c b/ras-aer-handler.c
+index bb1a6f6..29f6551 100644
+--- a/ras-aer-handler.c
++++ b/ras-aer-handler.c
+@@ -67,9 +67,11 @@ int ras_aer_event_handler(struct trace_seq *s,
+ 	struct tm *tm;
+ 	struct ras_aer_event ev;
+ 	char buf[BUF_LEN];
++#ifdef HAVE_AMP_NS_DECODE
+ 	char ipmi_add_sel[105];
+ 	uint8_t sel_data[5];
+ 	int seg, bus, dev, fn;
++#endif
+ 
+ 	/*
+ 	 * Newer kernels (3.10-rc1 or upper) provide an uptime clock.
+@@ -132,19 +134,27 @@ int ras_aer_event_handler(struct trace_seq *s,
+ 	switch (severity_val) {
+ 	case HW_EVENT_AER_UNCORRECTED_NON_FATAL:
+ 		ev.error_type = "Uncorrected (Non-Fatal)";
++#ifdef HAVE_AMP_NS_DECODE
+ 		sel_data[0] = 0xca;
++#endif
+ 		break;
+ 	case HW_EVENT_AER_UNCORRECTED_FATAL:
+ 		ev.error_type = "Uncorrected (Fatal)";
++#ifdef HAVE_AMP_NS_DECODE
+ 		sel_data[0] = 0xca;
++#endif
+ 		break;
+ 	case HW_EVENT_AER_CORRECTED:
+ 		ev.error_type = "Corrected";
++#ifdef HAVE_AMP_NS_DECODE
+ 		sel_data[0] = 0xbf;
++#endif
+ 		break;
+ 	default:
+ 		ev.error_type = "Unknown severity";
++#ifdef HAVE_AMP_NS_DECODE
+ 		sel_data[0] = 0xbf;
++#endif
+ 	}
+ 	trace_seq_puts(s, ev.error_type);
+ 
